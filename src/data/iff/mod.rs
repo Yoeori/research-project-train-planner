@@ -276,8 +276,8 @@ pub async fn update_iff_database() -> Result<IFF, Box<dyn Error + 'static>> {
     }
 
     let stops = iff.services.values().map(|service| service_stops_to_stop_insertable(service)).flatten().collect::<Vec<StopInsertable>>();
-    for i in (0..services.len()).step_by(1000) {
-        diesel::replace_into(service_stops::table).values(&stops[i..(i+1000).min(services.len())]).execute(&connection)?;
+    for i in (0..stops.len()).step_by(1000) {
+        diesel::replace_into(service_stops::table).values(&stops[i..(i+1000).min(stops.len())]).execute(&connection)?;
     }
 
     Ok(iff)
