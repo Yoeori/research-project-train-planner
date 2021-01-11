@@ -1,5 +1,5 @@
 [package]
-name = "research-project-testing"
+name = "research-project"
 version = "0.1.0"
 authors = ["Yoeri Otten <y.d.otten@student.utwente.nl>"]
 edition = "2018"
@@ -8,3 +8,21 @@ edition = "2018"
 
 [dependencies]
 flate2 = "1.0.19"
+zmq = "0.9"
+xml-rs = "0.8"
+tokio = { version = "1", features = ["full"] }
+dotenv = "0.15.0"
+serde = { version = "1.0", features = ["derive"] }
+serde_repr = "0.1.0"
+quick-xml = { version = "0.20.0", features = ["serialize"] }
+zip = "0.5.0"
+reqwest = "0.11.0"
+regex = "1"
+lazy_static = "1.4"
+encoding_rs="0.8"
+smol_str="0.1.0"
+chrono = { version = "0.4.0", features = ["serde"] }
+diesel = { version = "1.4.4", features = ["mysql", "chrono"] }
+diesel_migrations = "1.4.0"
+diesel-derive-enum = { version = "1", features = ["mysql"] }
+clap = "2.33.0"

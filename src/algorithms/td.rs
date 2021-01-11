@@ -2,9 +2,10 @@ use std::collections::HashMap;
 use std::collections::BinaryHeap;
 use std::cmp::Ordering;
 
-use crate::MAX_STATIONS;
-use crate::Trip;
-use crate::Connection;
+use crate::types::TripResult;
+use crate::types::Connection;
+
+pub const MAX_STATIONS: usize = 100000;
 
 #[derive(Debug)]
 pub struct Station<'a> {
@@ -79,7 +80,7 @@ impl PartialOrd for State {
 }
 
 
-pub fn compute<'a>(data: &'a HashMap<usize, Station>, start_stop: usize, end_stop: usize, start_time: u32) -> Option<Trip<'a>> {
+pub fn compute<'a>(data: &'a HashMap<usize, Station>, start_stop: usize, end_stop: usize, start_time: u32) -> Option<TripResult<'a>> {
  
     let mut dist: Vec<u32> = vec![u32::MAX; MAX_STATIONS];
     let mut heap: BinaryHeap<State> = BinaryHeap::new();
@@ -104,7 +105,7 @@ pub fn compute<'a>(data: &'a HashMap<usize, Station>, start_stop: usize, end_sto
 
             trip.reverse();
 
-            return Some(Trip {
+            return Some(TripResult {
                 connections: trip
             });
         }
@@ -210,7 +211,7 @@ mod tests {
         let trip = compute(&data, 0, 5, 0);
 
         assert!(trip.is_some());
-        assert_eq!(compute(&data, 0, 5, 0).unwrap(), Trip {
+        assert_eq!(compute(&data, 0, 5, 0).unwrap(), TripResult {
             connections: connections.iter().collect::<Vec<&Connection>>()
         });
     }
