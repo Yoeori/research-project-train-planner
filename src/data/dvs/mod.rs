@@ -1,7 +1,6 @@
 mod dvs_message_types;
 
-use std::{io::Read, sync::{Arc, Mutex}, thread::JoinHandle};
-use std::ops::Deref;
+use std::{io::Read, thread::JoinHandle};
 
 // use quick_xml::de::from_str;
 use diesel::prelude::*;
@@ -34,14 +33,12 @@ pub const ENVELOPES_RIT: &[&[u8]] = &[
 #[allow(dead_code)]
 pub fn dvs_stream(envelopes: &'static [&[u8]]) -> Vec<JoinHandle<Result<(), Box<diesel::result::Error>>>> {
 
-    let db_conn = Arc::new(Mutex::new(database::establish_connection()));
-
     // Spawn multiple connection to distinguish between envelopes
     envelopes.iter().map(|&env| {
-        let conn = db_conn.clone();
         std::thread::spawn(move || {
 
             let subscription = zeromq::subscribe("tcp://pubsub.besteffort.ndovloket.nl:7664", &[env]).unwrap();
+            let db_conn = database::establish_connection();
             let env = std::str::from_utf8(env).unwrap();
 
             println!("Listening on {}", env);
@@ -59,7 +56,7 @@ pub fn dvs_stream(envelopes: &'static [&[u8]]) -> Vec<JoinHandle<Result<(), Box<
                 #[table_name = "dvs_messages"]
                 struct DVSMessageInsertable<'a> { message: &'a String, envelope: &'a str }
                 diesel::insert_into(dvs_messages::table)
-                    .values(DVSMessageInsertable { message: &message, envelope: env }).execute(conn.lock().unwrap().deref())?;
+                    .values(DVSMessageInsertable { message: &message, envelope: env }).execute(&db_conn)?;
 
                 // Interpret message
                 // let dvs_message: Result<DVSMessage, _> = from_str(&message);

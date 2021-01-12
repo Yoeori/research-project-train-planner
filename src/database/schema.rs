@@ -16,7 +16,7 @@ table! {
         id -> Integer,
         created_at -> Datetime,
         envelope -> Nullable<Varchar>,
-        message -> Nullable<Text>,
+        message -> Nullable<Longtext>,
     }
 }
 
