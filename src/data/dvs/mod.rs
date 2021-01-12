@@ -44,6 +44,8 @@ pub fn dvs_stream(envelopes: &'static [&[u8]]) -> Vec<JoinHandle<Result<(), Box<
             let subscription = zeromq::subscribe("tcp://pubsub.besteffort.ndovloket.nl:7664", &[env]).unwrap();
             let env = std::str::from_utf8(env).unwrap();
 
+            println!("Listening on {}", env);
+
             loop {
                 let mut xml = zeromq::receive(&subscription).unwrap();
 
