@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::{collections::{HashMap, HashSet}, ops::Range};
 
 use chrono::NaiveDate;
 use diesel::Insertable;
@@ -19,7 +19,6 @@ pub struct IFF {
 #[derive(Debug, Clone, Queryable, Insertable)]
 #[table_name = "stations"]
 pub struct Station {
-        
     #[diesel(deserialize_as = "String")]
     pub code: String,
     
@@ -31,16 +30,16 @@ pub struct Station {
     pub timezone: i8,
 
     pub interchange_duration: u8,
-
     pub is_interchange_station: bool,
-    // pub x_coordinate: i32,
-    // pub y_coordinate: i32
+
+    pub lat: i32,
+    pub lng: i32,
 }
 
 #[derive(Debug, Clone)]
 pub struct Service {
     pub identification: usize,
-    // service_number: Vec<(usize, usize, Range<usize>)>,
+    pub service_number: Vec<(usize, Range<usize>)>,
     
     pub validity: usize,
 

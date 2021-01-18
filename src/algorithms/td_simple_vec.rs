@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::collections::BinaryHeap;
 use std::cmp::Ordering;
 
-use crate::types::TripResult;
+use crate::{benchable::Benchable, types::{Timetable, TripResult}};
 use crate::types::Connection;
 
 pub const MAX_STATIONS: usize = 100000;
@@ -29,27 +29,6 @@ impl<'a> Station<'a> {
         }
     }
 
-}
-
-pub fn prepare<'a>(connections: &'a Vec<Connection>) -> HashMap<usize, Station> {
-    let mut stations: HashMap<usize, Station> = HashMap::new();
-
-    for connection in connections {
-        if !stations.contains_key(&connection.dep_stop) {
-            stations.insert(connection.dep_stop, Station {
-                station: connection.dep_stop,
-                neighbours: HashMap::new()
-            });
-        }
-
-        stations.get_mut(&connection.dep_stop).unwrap().add_connection(connection);        
-    }
-
-    for (_, station) in stations.iter_mut() {
-        station.sort();
-    }
-
-    stations
 }
 
 // Dijkstra implementation is mainly derived from example at: https://doc.rust-lang.org/std/collections/binary_heap/
@@ -79,60 +58,6 @@ impl PartialOrd for State {
     }
 }
 
-
-pub fn compute<'a>(data: &'a HashMap<usize, Station>, start_stop: usize, end_stop: usize, start_time: u32) -> Option<TripResult<'a>> {
- 
-    let mut dist: Vec<u32> = vec![u32::MAX; MAX_STATIONS];
-    let mut heap: BinaryHeap<State> = BinaryHeap::new();
-    let mut prev: Vec<Option<&Connection>> = vec![None; MAX_STATIONS];
-
-    dist[start_stop] = 0;
-    heap.push(State {
-        cost: start_time,
-        station: start_stop
-    });
-
-    while let Some(State { cost, station }) = heap.pop() {
-        // Alternatively we could have continued to find all shortest paths
-        if station == end_stop {
-            // Create trip
-            let mut trip: Vec<&Connection> = Vec::new();
-            let mut cur = end_stop;
-            while prev[cur] != None {
-                trip.push(prev[cur].unwrap());
-                cur = prev[cur].unwrap().dep_stop;
-            }
-
-            trip.reverse();
-
-            return Some(TripResult {
-                connections: trip
-            });
-        }
-
-        // Important as we may have already found a better way
-        if cost > dist[station] || !data.contains_key(&station) { continue; }
-
-        // For each node we can reach, see if we can find a way with
-        // a lower cost going through this node
-        for (_, node) in data.get(&station).unwrap().neighbours.iter() {
-
-            // Find cheapest path to edge station
-            let edge = bin_search_arr(node, cost);
-
-            if let Some(edge) = edge {
-                if edge.arr_time < dist[edge.arr_stop] {
-                    heap.push(State { cost: edge.arr_time, station: edge.arr_stop });
-                    dist[edge.arr_stop] = edge.arr_time;
-                    prev[edge.arr_stop] = Some(edge);
-                }
-            }
-        }
-    };
-
-    None
-}
-
 // Finds the first connection in vec which is equal or greater than start_time
 fn bin_search_arr<'a>(connections: &Vec<&'a Connection>, start_time: u32) -> Option<&'a Connection> {
     let mut left: usize = 0;
@@ -158,6 +83,94 @@ fn bin_search_arr<'a>(connections: &Vec<&'a Connection>, start_time: u32) -> Opt
 
     return ans;
 }
+
+pub struct TDSimpleVec<'a> {
+    data: HashMap<usize, Station<'a>>
+}
+
+impl<'a> Benchable<'a> for TDSimpleVec<'a> {
+    fn name(&self) -> &'static str {
+        "Simple time-dependent graph approach with Vector"
+    }
+
+    fn new(trips: &'a Timetable) -> Self {
+        let mut stations: HashMap<usize, Station> = HashMap::new();
+
+        for connection in trips.trips.iter().map(|t| &t.connections).flatten() {
+            if !stations.contains_key(&connection.dep_stop) {
+                stations.insert(connection.dep_stop, Station {
+                    station: connection.dep_stop,
+                    neighbours: HashMap::new()
+                });
+            }
+
+            stations.get_mut(&connection.dep_stop).unwrap().add_connection(connection);        
+        }
+
+        for (_, station) in stations.iter_mut() {
+            station.sort();
+        }
+
+        TDSimpleVec {
+            data: stations
+        }
+    }
+
+    fn find_earliest_arrival(&self, dep_stop: usize, arr_stop: usize, dep_time: u32) -> Option<TripResult> {
+
+        let mut dist: Vec<u32> = vec![u32::MAX; MAX_STATIONS];
+        let mut heap: BinaryHeap<State> = BinaryHeap::new();
+        let mut prev: Vec<Option<&Connection>> = vec![None; MAX_STATIONS];
+
+        dist[dep_stop] = 0;
+        heap.push(State {
+            cost: dep_time,
+            station: dep_stop
+        });
+
+        while let Some(State { cost, station }) = heap.pop() {
+            // Alternatively we could have continued to find all shortest paths
+            if station == arr_stop {
+                // Create trip
+                let mut trip: Vec<&Connection> = Vec::new();
+                let mut cur = arr_stop;
+                while prev[cur] != None {
+                    trip.push(prev[cur].unwrap());
+                    cur = prev[cur].unwrap().dep_stop;
+                }
+
+                trip.reverse();
+
+                return Some(TripResult {
+                    connections: trip
+                });
+            }
+
+            // Important as we may have already found a better way
+            if cost > dist[station] || !self.data.contains_key(&station) { continue; }
+
+            // For each node we can reach, see if we can find a way with
+            // a lower cost going through this node
+            for (_, node) in self.data.get(&station).unwrap().neighbours.iter() {
+
+                // Find cheapest path to edge station
+                let edge = bin_search_arr(node, cost);
+
+                if let Some(edge) = edge {
+                    if edge.arr_time < dist[edge.arr_stop] {
+                        heap.push(State { cost: edge.arr_time, station: edge.arr_stop });
+                        dist[edge.arr_stop] = edge.arr_time;
+                        prev[edge.arr_stop] = Some(edge);
+                    }
+                }
+            }
+        };
+
+        None
+    }
+}
+
+alg_test!(TDSimpleVec);
 
 #[cfg(test)]
 mod tests {
@@ -194,25 +207,5 @@ mod tests {
 
         assert!(bin_search_arr(&connections1, 21).is_none());
 
-    }
-
-    #[test]
-    fn route_test() {
-        // Very simple test, this doesnt prove anything :(
-        let connections = vec![
-            Connection { dep_stop: 0, arr_stop: 1, dep_time: 1, arr_time: 4 },
-            Connection { dep_stop: 1, arr_stop: 2, dep_time: 5, arr_time: 9 },
-            Connection { dep_stop: 2, arr_stop: 3, dep_time: 10, arr_time: 14 },
-            Connection { dep_stop: 3, arr_stop: 4, dep_time: 15, arr_time: 19 },
-            Connection { dep_stop: 4, arr_stop: 5, dep_time: 20, arr_time: 25 },
-        ];
-
-        let data = prepare(&connections);
-        let trip = compute(&data, 0, 5, 0);
-
-        assert!(trip.is_some());
-        assert_eq!(compute(&data, 0, 5, 0).unwrap(), TripResult {
-            connections: connections.iter().collect::<Vec<&Connection>>()
-        });
     }
 }

@@ -1,12 +1,16 @@
-use crate::types::{Trip, TripUpdate};
+use crate::types::{Timetable, TripResult, TripUpdate};
 
-pub trait Benchable {
-    fn new(&mut self, trips: Vec<Trip>);
-    fn update(&mut self, update: TripUpdate);
-    fn find_earliest_arrival(&self, dep_stop: u32, arr_stop: u32, dep_time: usize);
+pub trait Benchable<'a> {
+    fn new(timetable: &'a Timetable) -> Self where Self: Sized;
+    fn name(&self) -> &'static str;
+    fn find_earliest_arrival(&self, dep_stop: usize, arr_stop: usize, dep_time: u32) -> Option<TripResult>;
 }
 
-pub trait BenchableProfile {
+pub trait BenchableLive<'a>: Benchable<'a> {
+    fn update(&mut self, update: &'a TripUpdate);
+}
+
+pub trait BenchableProfile<'a>: Benchable<'a> {
     // TODO
 }
 

@@ -44,6 +44,18 @@ table! {
     use diesel::sql_types::*;
     use crate::database::types::*;
 
+    service_identifier (service_id, identifier, from_index, to_index) {
+        service_id -> Unsigned<Integer>,
+        identifier -> Unsigned<Integer>,
+        from_index -> Unsigned<Smallint>,
+        to_index -> Unsigned<Smallint>,
+    }
+}
+
+table! {
+    use diesel::sql_types::*;
+    use crate::database::types::*;
+
     service_stops (service_id, ordering) {
         service_id -> Unsigned<Integer>,
         ordering -> Unsigned<Integer>,
@@ -77,6 +89,8 @@ table! {
         timezone -> Tinyint,
         interchange_duration -> Unsigned<Tinyint>,
         is_interchange_station -> Bool,
+        lat -> Integer,
+        lng -> Integer,
     }
 }
 
@@ -112,6 +126,7 @@ allow_tables_to_appear_in_same_query!(
     dvs_messages,
     services,
     service_attributes,
+    service_identifier,
     service_stops,
     service_trns_modes,
     stations,

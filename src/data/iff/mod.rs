@@ -1,6 +1,6 @@
 pub mod types;
 
-use std::{collections::{HashMap, HashSet}, error::Error, fmt::Debug, io::{self, Cursor, Read}, iter::{FromIterator, Peekable}};
+use std::{collections::{HashMap, HashSet}, error::Error, fmt::Debug, io::{self, Cursor, Read}, iter::{FromIterator, Peekable}, ops::Range};
 
 use chrono::{Duration, NaiveDate};
 use smol_str::SmolStr;
@@ -8,10 +8,12 @@ use zip::{ZipArchive, result::ZipError};
 use lazy_static::lazy_static;
 use regex::Regex;
 use encoding_rs::mem;
-use diesel::prelude::*;
+use diesel::{prelude::*, sql_types::Date};
+use itertools::Itertools;
 
 use self::types::{IFF, Station, Service, Stop};
-use crate::database::types::ServiceStopType;
+use crate::{database::types::ServiceStopType, types::{Connection, Timetable, Trip}};
+use crate::database::schema::service_stops;
 
 lazy_static! {
     static ref RE_TRNSMODE: Regex = Regex::new(r"(?P<id>[A-Z]+)\s*,(?P<description>[\w \.]*[\w\.]+)\s*").unwrap();
@@ -29,7 +31,7 @@ impl IFF {
         }
 
         let stations: HashMap<SmolStr, Station> = get_file("stations.dat", &mut zip)?.lines().skip(1).map(|line| {
-           (
+            (
                 SmolStr::new(&line[2..9].trim_end()),
                 Station {
                     is_interchange_station: &line[0..1] == "1",
@@ -38,9 +40,13 @@ impl IFF {
                     country: line[16..20].trim().to_string(),
                     timezone: line[21..25].parse().unwrap(),
                     interchange_duration: line[10..12].parse().unwrap(),
+                    lat: line[29..35].parse::<i32>().unwrap() * 10,
+                    lng: line[36..42].parse::<i32>().unwrap() * 10
                 }
             )
         }).collect();
+
+        // std::process::exit(0x0);
 
         let trns_modes: HashMap<SmolStr, String> = RE_TRNSMODE.captures_iter(&get_file("trnsmode.dat", &mut zip)?).map(|cap| {
             (
@@ -60,6 +66,7 @@ impl IFF {
             let mut trns_modes = vec![];
             let mut attributes = vec![];
             let mut stops = vec![];
+            let mut service_number = vec![];
             
             // while let Some(line) = service.next_if(|line| line.chars().next().unwrap() != '#') (currently unstable, same as below)
             while service.peek().is_some() && service.peek().unwrap().len() != 0 && service.peek().unwrap().chars().next().unwrap() != '#' {
@@ -67,7 +74,10 @@ impl IFF {
 
                 match line.chars().next().unwrap() {
                     '%' => {
-                        // Skip for now, let's figure this out later
+                        service_number.push((
+                            line[5..10].parse()?,
+                            line[18..21].parse()?..line[22..25].parse()?
+                        ));
                     },
                     '-' => validity = Some(line[1..6].parse()?),
                     '&' => trns_modes.push(line[1..5].trim_end().to_string()),
@@ -116,6 +126,7 @@ impl IFF {
 
             Ok(Service {
                 identification,
+                service_number,
                 validity: validity.ok_or("No validity set")?,
                 trns_modes,
                 attributes,
@@ -171,7 +182,7 @@ pub async fn update_iff_database() -> Result<IFF, Box<dyn Error + 'static>> {
     let connection = crate::database::establish_connection();
 
     // Upload stations to database
-    use crate::database::schema::stations;
+    // use crate::database::schema::stations;
     diesel::replace_into(stations::table).values(Vec::from_iter(iff.stations.values())).execute(&connection)?;
     
     // Upload trns_modes to database
@@ -207,7 +218,24 @@ pub async fn update_iff_database() -> Result<IFF, Box<dyn Error + 'static>> {
         diesel::replace_into(services::table).values(&services[i..(i+1000).min(services.len())]).execute(&connection)?;
     }
 
-    use crate::database::schema::service_stops;
+    // Service identifiers
+    use crate::database::schema::service_identifier;
+    #[derive(Debug, Insertable)]
+    #[table_name = "service_identifier"]
+    struct ServiceIdentifierInsertable { service_id: u32, identifier: u32, from_index: u16, to_index: u16 };
+
+    let service_identifiers = iff.services.values()
+        .map(|service| service.service_number.iter().map(move |id| ServiceIdentifierInsertable {
+            service_id: service.identification as u32,
+            identifier: id.0 as u32,
+            from_index: id.1.start as u16,
+            to_index: id.1.end as u16
+        })).flatten().collect::<Vec<ServiceIdentifierInsertable>>();
+
+    for i in (0..service_identifiers.len()).step_by(1000) {
+        diesel::replace_into(service_identifier::table).values(&service_identifiers[i..(i+1000).min(service_identifiers.len())]).execute(&connection)?;
+    }
+
     #[derive(Debug, Insertable)]
     #[table_name = "service_stops"]
     struct StopInsertable<'a> {
@@ -281,4 +309,123 @@ pub async fn update_iff_database() -> Result<IFF, Box<dyn Error + 'static>> {
     }
 
     Ok(iff)
+}
+
+use crate::database::schema::stations;
+#[derive(Debug, PartialEq, Eq, Hash, QueryableByName, Clone)]
+#[table_name = "stations"]
+struct IFFStop {
+    code: String,
+
+    // Currently the latitude and longitude ar in the rijksdriehoekscoördinatensystem, should probably be converted in to WG84
+    // However RD has the added benefit of being semi-distance-accurate which means we don't need to do difficult
+    //  distance calculations!
+    lat: i32,
+    lng: i32
+
+    // TODO for eventually adding interchanges at stations
+    // Main problem is that there can be platforms in the updates which weren't present in the original timetable
+    // Which means that the stops list in the timetable need to be updated after use
+    // Probably best way is to use some kind of interior mutability pattern?
+    // platform: Option<String>
+}
+
+impl crate::types::Stop for IFFStop {
+    fn to_string(&self) -> String {
+        format!("{}", self.code)
+    }
+
+    fn distance(&self, other: &Box<dyn crate::types::Stop>) -> Option<f64> {
+        let c1 = self.coords().unwrap();
+        let c2 = other.coords().unwrap();
+
+        Some(((c1.0 - c2.0).powi(2) + (c1.1 - c2.1).powi(2)).sqrt())
+    }
+
+    fn coords(&self) -> Option<(f64, f64)> {
+        Some((self.lat as f64, self.lng as f64))
+    }
+}
+
+pub fn get_timetable_for_day(date: NaiveDate) -> Result<Timetable, Box<dyn Error>> {
+
+    fn query_to_trips(connections: Vec<QueryConnection>, stops: &HashMap<&String, usize>, service_ids: &Vec<(usize, Range<usize>)>) -> Vec<Trip> {
+        service_ids.iter().map(|(id, range)| {
+            Trip {
+                identifier: *id,
+                connections: query_to_trip(&connections[range.clone()], &stops)
+            }
+        }).collect()
+    }
+
+    fn query_to_trip(query_connections: &[QueryConnection], stops: &HashMap<&String, usize>) -> Vec<Connection> {
+        let mut connections = vec![];
+        let mut prev_connection = &query_connections[0];
+        for next_connection in &query_connections[1..] {
+            connections.push(Connection {
+                dep_stop: *stops.get(&prev_connection.station_code).unwrap(),
+                arr_stop: *stops.get(&next_connection.station_code).unwrap(),
+                
+                dep_time: prev_connection.dep_time.unwrap() as u32 * 100,
+                arr_time: {
+                    if let Some(arr_time) = next_connection.arr_time {
+                        arr_time
+                    } else {
+                        next_connection.dep_time.unwrap()
+                    }
+                } as u32 * 100
+            });
+            prev_connection = next_connection;
+        }
+        connections
+    }
+    
+    let conn = crate::database::establish_connection();
+
+    #[derive(Debug, Queryable)]
+    struct QueryServiceIdentifier{ service_id: u32, identifier: u32, from_index: u16, to_index: u16 };
+
+    use crate::database::schema::service_identifier::dsl::*;
+    let service_ids: HashMap<usize, Vec<(usize, Range<usize>)>> = service_identifier.load::<QueryServiceIdentifier>(&conn)?
+        .into_iter()
+        .group_by(|item| item.service_id)
+        .into_iter()
+        .map(|(id, items)| (id as usize, 
+            items.map(|id| (id.identifier as usize, (id.from_index as usize - 1)..(id.to_index as usize))).collect()
+        ))
+        .collect();
+
+    #[derive(Debug, QueryableByName)]
+    #[table_name = "service_stops"]
+    struct QueryConnection {
+        service_id: u32,
+        type_: ServiceStopType,
+        station_code: String,
+        arr_time: Option<u16>,
+        dep_time: Option<u16>,
+        platform: Option<String>
+    }
+
+
+    // Get stop list
+    let stops: HashMap<IFFStop, usize> = diesel::sql_query(include_str!("stop_list.sql")).load::<IFFStop>(&conn)?
+        .into_iter()
+        .enumerate().map(|(i, stop)| (stop, i))
+        .collect();
+
+    let stops_lookup: HashMap<&String, usize> = stops.iter().map(|(stop, id)| (&stop.code, *id)).collect();
+
+    let trips = diesel::sql_query(include_str!("timetable_for_day.sql"))
+        .bind::<Date, _>(&date)
+        .load::<QueryConnection>(&conn)?
+        .into_iter()
+        .group_by(|stop| stop.service_id)
+        .into_iter()
+        .map(|(id, connections)| query_to_trips(connections.collect(), &stops_lookup, service_ids.get(&(id as usize)).unwrap()))
+        .flatten().collect::<Vec<Trip>>();
+
+    Ok(Timetable {
+        trips,
+        stops: stops.into_iter().map(|(stop, i)| (i, Box::new(stop) as Box<dyn crate::types::Stop>)).collect()
+    })
 }

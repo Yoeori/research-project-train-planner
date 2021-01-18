@@ -1,0 +1,3 @@
+ALTER TABLE stations
+DROP COLUMN lat,
+DROP COLUMN lng;

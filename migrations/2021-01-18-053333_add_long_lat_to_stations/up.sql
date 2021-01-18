@@ -1,0 +1,3 @@
+ALTER TABLE stations
+ADD lat INT NOT NULL,
+ADD lng INT NOT NULL;

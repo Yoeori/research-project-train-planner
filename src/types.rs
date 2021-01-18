@@ -8,10 +8,11 @@
 //  only one stop for a set of 
 // A timetable can also be updated with live information, either changing connections, deleting them or adding new connections (and associated trips)
 
-use std::{cmp::Ordering, error::Error};
+use std::{cmp::Ordering, collections::HashMap, error::Error, fmt::Debug};
+use std::hash::Hash;
 
 /// As defined
-#[derive(Debug, PartialEq, Eq, Hash)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub struct Connection {
     pub dep_stop: usize,
     pub arr_stop: usize,
@@ -49,20 +50,21 @@ impl Connection {
 }
 
 // As defined (added identifier for 'easier' identification)
-#[derive(Debug, PartialEq, Eq, Hash)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub struct Trip {
-    identifier: usize,
-    connections: Vec<Connection>
+    pub identifier: usize,
+    pub connections: Vec<Connection>
 }
 
 // As defined, however trip based for identification purposes
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[allow(dead_code)]
-pub enum TripUpdate<'a> {
-    DeleteTrip { identifier: usize },
-    DeleteConnection { identifier: usize, index: usize, stop: u32 },
-    UpdateConnection { identifier: usize, index: usize, connection: &'a Connection },
-    AddConnection { identifier: usize, index: usize, connection: &'a Connection }
+pub enum TripUpdate {
+    DeleteTrip { trip: Trip },
+    AddTrip { trip: Trip },
+    AddConnection { trip: Trip, connection: Connection },
+    DeleteConnection { trip: Trip, connection: Connection },
+    UpdateConnection { trip: Trip, connection_old: Connection, connection_new: Connection },
 }
 
 // As defined
@@ -73,13 +75,34 @@ pub struct Path {
     duration: u8
 }
 
-// TODO this will later be an tick-tock pair of (Trip, connection index start, connection index end) and walk path
+pub trait Stop: Debug {
+    // Since in the timetable all stops are converted to dyn Stop, it's hard to find stops by name
+    // We probably need to figure out a way such that all stop ID's are derived from the stop itself
+    // Most likely solution would be to use UIC station code + some kind of platform identifier
+    // Might also want to look to change the timetable to use a generic stop type instead of a dynamic
+    // However, multiple types of stop might also be possible, think of the Norwegian model containing MultimodalStopPlace and GroupOfStopPlaces etc.
+    fn to_string(&self) -> String;
+    fn coords(&self) -> Option<(f64, f64)>;
+    fn distance(&self, other: &Box<dyn Stop>) -> Option<f64>;
+}
+
+#[derive(Debug)]
+pub struct Timetable {
+    pub stops: HashMap<usize, Box<dyn Stop>>,
+    pub trips: Vec<Trip>,
+    //pub footpaths: HashMap<usize, HashMap<usize, usize>>
+    // Connections and stations are defined within the trips and footpaths.
+}
+
+// TODO this will later be an tick-tock pair of (Trip, connection index start, connection index end) and footpaths
+// For no there are not footpaths
 #[derive(Debug, PartialEq, Eq)]
 pub struct TripResult<'a> {
     pub connections: Vec<&'a Connection>
 }
 
 impl TripResult<'_> {
+    #[allow(dead_code)]
     pub fn arrival(&self) -> u32 {
         self.connections.last().unwrap().arr_time
     }
