@@ -42,8 +42,8 @@ pub fn bench_algorithms(data_set: &str, timetable: &Timetable) -> Result<(), Box
 fn bench_algorithm<'a>(data_set: &str, benchable: &Box<dyn Benchable<'a> + 'a>, timetable: &'a Timetable) -> Vec<RouteBench> {
     let mut times = vec![];
 
-    for (&stop1, place1) in &timetable.stops {
-        for (&stop2, place2) in &timetable.stops {
+    for (&stop1, place1) in timetable.stops.iter().take(100) {
+        for (&stop2, place2) in timetable.stops.iter().skip(100).take(100) {
             let before = Instant::now();
             benchable.find_earliest_arrival(stop1, stop2, 120000);
             let time = before.elapsed();
@@ -95,8 +95,8 @@ fn bench_algorithm_live<'a>(data_set: &str, benchable: &mut Box<dyn BenchableLiv
     let updates_to_perform_per_iteration = (updates.len() / timetable.stops.len().pow(2)) + 1;
     let mut updates = updates.iter();
 
-    for (&stop1, place1) in &timetable.stops {
-        for (&stop2, place2) in &timetable.stops {
+    for (&stop1, place1) in timetable.stops.iter().take(100) {
+        for (&stop2, place2) in timetable.stops.iter().skip(100).take(100) {
             let before = Instant::now();
             benchable.find_earliest_arrival(stop1, stop2, 120000);
             let time = before.elapsed();
