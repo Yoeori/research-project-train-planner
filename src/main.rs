@@ -39,10 +39,12 @@ async fn main() -> Result<(), Box<dyn Error + 'static>> {
             .help("Which set of envelopes to run")
             .possible_values(&["all", "dvs", "rit"])
             .default_value("all")))
-        .subcommand(SubCommand::with_name("bench")
-            .help("Perform all benchmarks"))
+        .subcommand(SubCommand::with_name("bench").about("Perform benchmarks with specified dataset").arg(Arg::with_name("set")
+            .help("Which data set to use for benching")
+            .possible_values(&["iff", "trainline"])
+            .default_value("iff")))
         .subcommand(SubCommand::with_name("example"))
-            .help("Gets route from Enschede Kennispark to Amersfoort Centraal on 2021-01-15 at 12:00")
+            .about("Gets route from Enschede Kennispark to Amersfoort Centraal on 2021-01-15 at 12:00")
         .subcommand(SubCommand::with_name("trip")
             .about("Looks up a specific trip on 2021-01-15")
             .arg(Arg::with_name("id").help("Train number").required(true)
@@ -66,16 +68,40 @@ async fn main() -> Result<(), Box<dyn Error + 'static>> {
 
             data::dvs::dvs_stream(envelopes).into_iter().for_each(|x| x.join().unwrap().unwrap());
         }
-        ("bench", _) => {
+        ("bench", Some(sub_matches)) => {
+            match sub_matches.value_of("set") {
+                Some("iff") => {
             println!("Generating timetable and updates list, this might take a while...");
             let timetable = data::iff::get_timetable_for_day(NaiveDate::from_ymd(2021, 1, 15))?;
             let updates = data::dvs::read_dvs_to_updates()?;
+
+                    println!("The timetable contains {} connections, stopping at {} places and contains {} updates.", 
+                        &timetable.trips.iter().map(|t| t.connections.len()).sum::<usize>(),
+                        &timetable.stops.len(),
+                        updates.len()
+                    );
 
             println!("Starting bench of static algorithms..");
             benchmarking::bench_algorithms("IFF", &timetable)?;
 
             println!("Starting bench of live algorithms..");
             benchmarking::bench_algorithms_live("IFF", &timetable, &updates)?;
+                }
+                Some("trainline") => {
+                    println!("Generating timetable and updates list, this might take a while...");
+                    let timetable = data::generic_data::get_data()?;
+
+                    println!("The timetable contains {} connections, stopping at {} places.", 
+                        &timetable.trips.iter().map(|t| t.connections.len()).sum::<usize>(),
+                        &timetable.stops.len()
+                    );
+
+                    println!("Starting bench of static algorithms..");
+                    benchmarking::bench_algorithms("Trainline EU", &timetable)?;
+                }
+                _ => {}
+            }
+
         }
         ("trip", Some(sub_matches)) => {
             let id = sub_matches.value_of("id").unwrap().parse().unwrap();
