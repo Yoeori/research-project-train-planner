@@ -23,7 +23,6 @@ impl Stop for SimpleStop {
     }
 }
 
-#[allow(dead_code)]
 pub fn get_data() -> Result<Timetable, Box<dyn Error>> {
     let mut data = GzDecoder::new(File::open("data/bench_data_48h.gz")?);
     let mut connections = String::new();
