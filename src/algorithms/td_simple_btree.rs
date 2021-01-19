@@ -95,7 +95,7 @@ impl<'a> Benchable<'a> for TDSimpleBTree<'a> {
         let mut heap: BinaryHeap<State> = BinaryHeap::new();
         let mut prev: Vec<Option<&Connection>> = vec![None; MAX_STATIONS];
 
-        dist[dep_stop] = 0;
+        dist[dep_stop] = dep_time;
         heap.push(State {
             cost: dep_time,
             station: dep_stop
