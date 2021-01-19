@@ -135,17 +135,39 @@ pub fn read_dvs_to_updates() -> Result<Vec<TripUpdate>, Box<dyn Error>> {
 
                                 let mut prev_stop = &trip.stops[0];
                                 for next_stop in &trip.stops[1..] {
+                                    if i >= cur_stops.len() {
+                                        // Sometimes stops get added to the end by mistake in the API.
+                                        // :( sad
+                                        // Should also take a look at the 1410, according to DIV belongs to the day itself
+                                        // While IFF says that it belongs to day-1
+                                        break;
+                                    }
+
                                     let s1 = &timetable.stops.get(&cur_stops[i].arr_stop).unwrap().to_string();
                                     let s2 = &next_stop.station.code.to_ascii_lowercase();
 
                                     if s1 == s2 {
+
+                                        if let Some(false) = next_stop.stopping.iter().find(|s| s.state == RITState::Current).map(|x| x.stopping) {
+                                            break;
+                                        }
+
+                                        let dep_time = match prev_stop.dep_time.iter().find(|s| s.state == RITState::Current) {
+                                            None => prev_stop.dep_time.iter().find(|s| s.state == RITState::Planned).unwrap(),
+                                            Some(t) => t
+                                        };
+
+                                        let arr_time = match next_stop.arr_time.iter().find(|s| s.state == RITState::Current) {
+                                            None => prev_stop.dep_time.iter().find(|s| s.state == RITState::Planned).unwrap(),
+                                            Some(t) => t
+                                        };
                                         
                                         let conn = Connection {
                                             dep_stop: *stops.get(&prev_stop.station.code.to_lowercase()).unwrap(),
                                             arr_stop: *stops.get(&next_stop.station.code.to_lowercase()).unwrap(),
 
-                                            dep_time: time_to_num(&prev_stop.dep_time.iter().find(|s| s.state == RITState::Current).unwrap().date),
-                                            arr_time: time_to_num(&next_stop.arr_time.iter().find(|s| s.state == RITState::Current).unwrap().date)
+                                            dep_time: time_to_num(&dep_time.date),
+                                            arr_time: time_to_num(&arr_time.date)
                                         };
 
                                         if cur_stops[i] != conn {
