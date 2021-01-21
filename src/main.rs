@@ -117,17 +117,32 @@ async fn main() -> Result<(), Box<dyn Error + 'static>> {
         }
         ("example", _) => {
             // Performs an example routing with CSA Vec
-            let timetable = data::iff::get_timetable_for_day(NaiveDate::from_ymd(2021, 1, 15))?;
+            let date = NaiveDate::from_ymd(2021, 1, 15);
+            let timetable = data::iff::get_timetable_for_day(&date)?;
 
             // Find ID's of amf and esk
             let amf = timetable.stops.iter().find(|(_, stop)| stop.to_string() == "amf").unwrap().0;
             let esk = timetable.stops.iter().find(|(_, stop)| stop.to_string() == "esk").unwrap().0;
 
-            let alg = algorithms::csa_vec::CSAVec::new(&timetable);
-            let route = alg.find_earliest_arrival(*esk, *amf, 120000).unwrap();
+            // let alg = algorithms::csa_vec::CSAVec::new(&timetable);
+            let mut alg = algorithms::csa_btree::CSABTree::new(&timetable);
+            let route = alg.find_earliest_arrival(*esk, *amf, Local.ymd(2021, 1, 15).and_hms(13, 0, 0).timestamp() as u32).unwrap();
 
             for conn in &route.connections {
-                println!("{:?} at {:?} => {:?} at {:?}", timetable.stops.get(&conn.dep_stop).unwrap(), conn.dep_time, timetable.stops.get(&conn.arr_stop).unwrap(), conn.arr_time);
+                println!("{:?} at {:?} => {:?} at {:?}", timetable.stops.get(&conn.dep_stop).unwrap(), Local.timestamp(conn.dep_time as i64, 0), timetable.stops.get(&conn.arr_stop).unwrap(), Local.timestamp(conn.arr_time as i64, 0));
+            }
+
+            // Get changes
+            let updates = data::dvs::read_dvs_to_updates(&date)?;
+            for update in updates.iter() {
+                alg.update(update);
+            }
+
+            let route = alg.find_earliest_arrival(*esk, *amf, Local.ymd(2021, 1, 15).and_hms(13, 0, 0).timestamp() as u32).unwrap();
+
+            println!("After updating:");
+            for conn in &route.connections {
+                println!("{:?} at {:?} => {:?} at {:?}", timetable.stops.get(&conn.dep_stop).unwrap(), Local.timestamp(conn.dep_time as i64, 0), timetable.stops.get(&conn.arr_stop).unwrap(), Local.timestamp(conn.arr_time as i64, 0));
             }
         }
         _ => {},
