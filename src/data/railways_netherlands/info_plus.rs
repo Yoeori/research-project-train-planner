@@ -1,6 +1,3 @@
-mod dvs_message_types;
-mod rit_message_types;
-
 use std::{collections::{BTreeSet, HashMap}, error::Error, io::Read, thread::JoinHandle};
 
 use chrono::NaiveDate;
@@ -10,7 +7,7 @@ use quick_xml::de::from_str;
 use crate::{data::zeromq, types::{TripUpdate, Connection}};
 use crate::database;
 
-use self::rit_message_types::RITMessage;
+use super::{iff, rit_message_types::RITMessage};
 
 #[allow(dead_code)]
 pub const ENVELOPES_ALL: &[&[u8]] = &[
@@ -70,7 +67,7 @@ pub fn dvs_stream(envelopes: &'static [&[u8]]) -> Vec<JoinHandle<Result<(), Box<
 pub fn read_dvs_to_updates(date: &NaiveDate) -> Result<Vec<TripUpdate>, Box<dyn Error>> {
 
     // Get timetable for given data
-    let timetable = crate::data::iff::get_timetable_for_day(&date)?;
+    let timetable = iff::get_timetable_for_day(&date)?;
 
     // We create a connections list using a Binary Tree, to make sure that the connections are always ordered.
     // This list should always contain the 'newest' known timetable

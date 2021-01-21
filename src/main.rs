@@ -16,6 +16,8 @@ use benchable::{Benchable, BenchableLive};
 use chrono::{Local, NaiveDate, TimeZone};
 use clap::{App, Arg, SubCommand};
 
+use data::railways_netherlands::{info_plus, iff};
+
 // Embeds migrations from migrations folder
 embed_migrations!();
 
@@ -54,27 +56,27 @@ async fn main() -> Result<(), Box<dyn Error + 'static>> {
     match app.subcommand() {
         ("iff", _) => {
             println!("Starting update of IFF data, this might take a while...");
-            data::iff::update_iff_database().await?;
+            iff::update_iff_database().await?;
         },
         ("dvs", Some(sub_matches)) => {
             println!("Starting to listen for DVS messages...");
 
             let envelopes = match sub_matches.value_of("envelopes") {
-                Some("all") => data::dvs::ENVELOPES_ALL,
-                Some("dvs") => data::dvs::ENVELOPES_DVS,
-                Some("rit") => data::dvs::ENVELOPES_RIT,
+                Some("all") => info_plus::ENVELOPES_ALL,
+                Some("dvs") => info_plus::ENVELOPES_DVS,
+                Some("rit") => info_plus::ENVELOPES_RIT,
                 other => panic!("Unknown command line value for envelopes: {:?}", other)
             };
 
-            data::dvs::dvs_stream(envelopes).into_iter().for_each(|x| x.join().unwrap().unwrap());
+            info_plus::dvs_stream(envelopes).into_iter().for_each(|x| x.join().unwrap().unwrap());
         }
         ("bench", Some(sub_matches)) => {
             match sub_matches.value_of("set") {
                 Some("iff") => {
                     println!("Generating timetable and updates list, this might take a while...");
                     let date = NaiveDate::from_ymd(2021, 1, 15);
-                    let timetable = data::iff::get_timetable_for_day(&date)?;
-                    let updates = data::dvs::read_dvs_to_updates(&date)?;
+                    let timetable = iff::get_timetable_for_day(&date)?;
+                    let updates = info_plus::read_dvs_to_updates(&date)?;
 
                     println!("The timetable contains {} connections, stopping at {} places and contains {} updates.", 
                         &timetable.trips.iter().map(|t| t.connections.len()).sum::<usize>(),
@@ -108,7 +110,7 @@ async fn main() -> Result<(), Box<dyn Error + 'static>> {
             let id = sub_matches.value_of("id").unwrap().parse().unwrap();
             println!("Looking up route of service {}", id);
 
-            let timetable = data::iff::get_timetable_for_day(&NaiveDate::from_ymd(2021, 1, 15))?;
+            let timetable = iff::get_timetable_for_day(&NaiveDate::from_ymd(2021, 1, 15))?;
             let trip = timetable.trips.iter().find(|x| x.identifier == id).unwrap();
 
             for conn in &trip.connections {
@@ -118,7 +120,7 @@ async fn main() -> Result<(), Box<dyn Error + 'static>> {
         ("example", _) => {
             // Performs an example routing with CSA Vec
             let date = NaiveDate::from_ymd(2021, 1, 15);
-            let timetable = data::iff::get_timetable_for_day(&date)?;
+            let timetable = iff::get_timetable_for_day(&date)?;
 
             // Find ID's of amf and esk
             let amf = timetable.stops.iter().find(|(_, stop)| stop.to_string() == "amf").unwrap().0;
@@ -133,7 +135,7 @@ async fn main() -> Result<(), Box<dyn Error + 'static>> {
             }
 
             // Get changes
-            let updates = data::dvs::read_dvs_to_updates(&date)?;
+            let updates = info_plus::read_dvs_to_updates(&date)?;
             for update in updates.iter() {
                 alg.update(update);
             }

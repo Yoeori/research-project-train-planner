@@ -1,5 +1,3 @@
-pub mod types;
-
 use std::{collections::{HashMap, HashSet}, error::Error, fmt::Debug, io::{self, Cursor, Read}, iter::{FromIterator, Peekable}, ops::Range};
 
 use chrono::{DateTime, Duration, Local, NaiveDate, TimeZone};
@@ -11,7 +9,7 @@ use encoding_rs::mem;
 use diesel::{prelude::*, sql_types::Date};
 use itertools::Itertools;
 
-use self::types::{IFF, Station, Service, Stop};
+use super::iff_types::{IFF, Station, Service, Stop};
 use crate::{database::types::ServiceStopType, types::{Connection, Timetable, Trip}};
 use crate::database::schema::service_stops;
 
