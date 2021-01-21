@@ -3,3 +3,4 @@
 .env
 .vscode
 bench*.csv
+_*
