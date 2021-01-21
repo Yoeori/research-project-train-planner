@@ -1,7 +1,10 @@
+use std::collections::HashMap;
+
 use serde::{Deserialize};
 use serde::de::{self, Deserializer, Unexpected};
-
 use chrono::{DateTime, Local, NaiveDate};
+
+use crate::types::{Connection, Trip};
 
 #[derive(Deserialize, Debug)]
 pub struct RITMessage {
@@ -79,6 +82,35 @@ pub struct RITLogicalPart {
 
     #[serde(rename = "LogischeRitDeelStation", default = "Vec::new")]
     pub stops: Vec<RITLogicalPartStop>
+}
+
+impl RITLogicalPart {
+    pub fn to_trip(&self, stops: &HashMap<String, usize>) -> Option<Trip> {
+        let mut connections = vec![];
+
+        let mut prev_saved_stop: Option<&RITLogicalPartStop> = None;
+        for next_stop in self.stops.iter() {
+            if next_stop.stopping.iter().find(|s| s.state == RITState::Current)?.stopping {
+                if let Some(prev_stop) = prev_saved_stop {
+                    connections.push(Connection {
+                        dep_stop: *stops.get(&prev_stop.station.code.to_lowercase())?,
+                        arr_stop: *stops.get(&next_stop.station.code.to_lowercase())?,
+
+                        dep_time: prev_stop.dep_time.iter().find(|s| s.state == RITState::Current)?.date.timestamp() as u32,
+                        arr_time: next_stop.arr_time.iter().find(|s| s.state == RITState::Current)?.date.timestamp() as u32
+                    });
+                    prev_saved_stop = Some(next_stop);
+                } else {
+                    prev_saved_stop = Some(next_stop);
+                }
+            }
+        }
+
+        Some(Trip {
+            identifier: self.trip_id,
+            connections
+        })
+    }
 }
 
 #[derive(Debug, Deserialize)]

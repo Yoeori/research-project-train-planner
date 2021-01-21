@@ -12,8 +12,8 @@ mod data;
 pub mod database;
 
 use std::error::Error;
-use benchable::Benchable;
-use chrono::NaiveDate;
+use benchable::{Benchable, BenchableLive};
+use chrono::{Local, NaiveDate, TimeZone};
 use clap::{App, Arg, SubCommand};
 
 // Embeds migrations from migrations folder
@@ -71,9 +71,10 @@ async fn main() -> Result<(), Box<dyn Error + 'static>> {
         ("bench", Some(sub_matches)) => {
             match sub_matches.value_of("set") {
                 Some("iff") => {
-            println!("Generating timetable and updates list, this might take a while...");
-            let timetable = data::iff::get_timetable_for_day(NaiveDate::from_ymd(2021, 1, 15))?;
-            let updates = data::dvs::read_dvs_to_updates()?;
+                    println!("Generating timetable and updates list, this might take a while...");
+                    let date = NaiveDate::from_ymd(2021, 1, 15);
+                    let timetable = data::iff::get_timetable_for_day(&date)?;
+                    let updates = data::dvs::read_dvs_to_updates(&date)?;
 
                     println!("The timetable contains {} connections, stopping at {} places and contains {} updates.", 
                         &timetable.trips.iter().map(|t| t.connections.len()).sum::<usize>(),
@@ -81,11 +82,11 @@ async fn main() -> Result<(), Box<dyn Error + 'static>> {
                         updates.len()
                     );
 
-            println!("Starting bench of static algorithms..");
-            benchmarking::bench_algorithms("IFF", &timetable)?;
+                    println!("Starting bench of static algorithms..");
+                    benchmarking::bench_algorithms("IFF", &timetable)?;
 
-            println!("Starting bench of live algorithms..");
-            benchmarking::bench_algorithms_live("IFF", &timetable, &updates)?;
+                    println!("Starting bench of live algorithms..");
+                    benchmarking::bench_algorithms_live("IFF", &timetable, &updates)?;
                 }
                 Some("trainline") => {
                     println!("Generating timetable and updates list, this might take a while...");
@@ -107,7 +108,7 @@ async fn main() -> Result<(), Box<dyn Error + 'static>> {
             let id = sub_matches.value_of("id").unwrap().parse().unwrap();
             println!("Looking up route of service {}", id);
 
-            let timetable = data::iff::get_timetable_for_day(NaiveDate::from_ymd(2021, 1, 15))?;
+            let timetable = data::iff::get_timetable_for_day(&NaiveDate::from_ymd(2021, 1, 15))?;
             let trip = timetable.trips.iter().find(|x| x.identifier == id).unwrap();
 
             for conn in &trip.connections {

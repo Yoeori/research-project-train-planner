@@ -1,16 +1,15 @@
 mod dvs_message_types;
 mod rit_message_types;
 
-use std::{collections::HashMap, error::Error, io::Read, thread::JoinHandle};
+use std::{collections::{BTreeSet, HashMap}, error::Error, io::Read, thread::JoinHandle};
 
-use chrono::{DateTime, Datelike, Local, NaiveDate};
+use chrono::NaiveDate;
 use diesel::{dsl::max, prelude::*};
 use quick_xml::de::from_str;
 
-use crate::{data::zeromq, types::{Trip, TripUpdate, Connection}};
+use crate::{data::zeromq, types::{TripUpdate, Connection}};
 use crate::database;
 
-use self::rit_message_types::{RITLogicalPart, RITState};
 use self::rit_message_types::RITMessage;
 
 #[allow(dead_code)]
@@ -68,164 +67,102 @@ pub fn dvs_stream(envelopes: &'static [&[u8]]) -> Vec<JoinHandle<Result<(), Box<
     
 }
 
-// TODO Currently very memory inefficient and cannot find deleted / added connections
-// Should probably use a BTree in the future for automatic ordering of connections and easier removal / insertions
-pub fn read_dvs_to_updates() -> Result<Vec<TripUpdate>, Box<dyn Error>> {
-    // First we get a day's timetable
-    let date = NaiveDate::from_ymd(2021, 1, 15);
-    let timetable = crate::data::iff::get_timetable_for_day(date)?;
+pub fn read_dvs_to_updates(date: &NaiveDate) -> Result<Vec<TripUpdate>, Box<dyn Error>> {
 
-    let mut trip_updates: Vec<TripUpdate> = vec![];
+    // Get timetable for given data
+    let timetable = crate::data::iff::get_timetable_for_day(&date)?;
 
-    // We make a full copy of all trips, all changes created compared to this list
-    let mut original_trips: HashMap<usize, Trip> = timetable.trips.iter().map(|trip| (trip.identifier, trip.clone())).collect();
-    let mut trips = original_trips.clone();
+    // We create a connections list using a Binary Tree, to make sure that the connections are always ordered.
+    // This list should always contain the 'newest' known timetable
+    let mut trips: HashMap<usize, BTreeSet<Connection>> = timetable.trips.iter()
+        .map(|trip| (trip.identifier, trip.connections.clone().into_iter().collect())).collect();
     let stops: HashMap<String, usize> = timetable.stops.iter().map(|(stop_id, stop)| (stop.to_string(), *stop_id)).collect();
 
+    let mut updates = vec![];
+
+    // Query through all messages
+    use database::schema::dvs_messages::dsl::*;
     #[derive(Debug, Queryable)]
-    struct DVSMessageQuery { message: Option<String>, envelope: Option<String> }
+    struct MessageQuery { message: Option<String>, envelope: Option<String> }
+
+    const STEP: usize = 5000;
 
     let conn = database::establish_connection();
+    let message_count = dvs_messages.select(max(id)).first::<Option<i32>>(&conn)?.unwrap() as usize;
 
-    use database::schema::dvs_messages::dsl::*;
-    let total_messages = dvs_messages.select(max(id)).first::<Option<i32>>(&conn)?.unwrap() as usize;
-
-    for i in (0..total_messages).step_by(5000) {
-        let messages: Vec<DVSMessageQuery> = dvs_messages.select((message, envelope))
+    for i in (0..message_count).step_by(STEP) {
+        let messages: Vec<MessageQuery> = dvs_messages.select((message, envelope))
             .filter(id.ge(i as i32))
-            .filter(id.lt(i as i32 + 5000))
-            .filter(envelope.eq("/RIG/InfoPlusRITInterface2"))
+            .filter(id.lt((i + STEP) as i32))
+            // For now we filter on one type of message, later on this could be expended to take a look at DVS info
+            // DVS info should not contain more information but might return departure information a bit earlier
+            .filter(envelope.eq("/RIG/InfoPlusRITInterface2")) 
             .order(id.asc())
-            .load::<DVSMessageQuery>(&conn)?;
+            .load::<MessageQuery>(&conn)?;
 
         for msg in messages {
             match msg.envelope.as_deref() {
-                Some("/RIG/InfoPlusDVSInterface4") => {
-                    // Might be used in the future, currently irrelevant
-                },
                 Some("/RIG/InfoPlusRITInterface2") => {
 
-                    // Interpret message
-                    let msg = &msg.message.unwrap();
-                    let dvs_message: Result<RITMessage, _> = from_str(msg);
-                    if let Err(err) = dvs_message {
-                        println!("{}", err);
-                        println!("{}", msg);
-                    } else if let Ok(rit_message) = dvs_message {
-                        if rit_message.message.rit.date == date {
-                            for trip in &rit_message.message.rit.trip.parts {
+                    // We read the message to a RIT message type using Serde
+                    let rit_message: RITMessage = from_str(&msg.message.as_deref().unwrap())?;
 
-                                // First we check if our trip already exists, otherwise we create a 'new trip'
-                                if !&trips.contains_key(&trip.trip_id) {
-                                    let new_trip = new_trip_from_rit(trip, &stops);
-
-                                    trip_updates.push(TripUpdate::AddTrip {
-                                        trip: new_trip.clone()
-                                    });
-
-                                    trips.insert(trip.trip_id, new_trip.clone());
-                                    original_trips.insert(trip.trip_id, new_trip);
-                                }
-
-                                // Than we lookup changes to the trip
-                                let mut i = 0;
-                                let cur_stops = &mut trips.get_mut(&trip.trip_id).unwrap();
-                                let cur_trip = cur_stops.clone();
-                                let cur_stops = &mut cur_stops.connections;
-
-                                let mut prev_stop = &trip.stops[0];
-                                for next_stop in &trip.stops[1..] {
-                                    if i >= cur_stops.len() {
-                                        // Sometimes stops get added to the end by mistake in the API.
-                                        // :( sad
-                                        // Should also take a look at the 1410, according to DIV belongs to the day itself
-                                        // While IFF says that it belongs to day-1
-                                        break;
-                                    }
-
-                                    let s1 = &timetable.stops.get(&cur_stops[i].arr_stop).unwrap().to_string();
-                                    let s2 = &next_stop.station.code.to_ascii_lowercase();
-
-                                    if s1 == s2 {
-
-                                        if let Some(false) = next_stop.stopping.iter().find(|s| s.state == RITState::Current).map(|x| x.stopping) {
-                                            break;
-                                        }
-
-                                        let dep_time = match prev_stop.dep_time.iter().find(|s| s.state == RITState::Current) {
-                                            None => prev_stop.dep_time.iter().find(|s| s.state == RITState::Planned).unwrap(),
-                                            Some(t) => t
-                                        };
-
-                                        let arr_time = match next_stop.arr_time.iter().find(|s| s.state == RITState::Current) {
-                                            None => prev_stop.dep_time.iter().find(|s| s.state == RITState::Planned).unwrap(),
-                                            Some(t) => t
-                                        };
-                                        
-                                        let conn = Connection {
-                                            dep_stop: *stops.get(&prev_stop.station.code.to_lowercase()).unwrap(),
-                                            arr_stop: *stops.get(&next_stop.station.code.to_lowercase()).unwrap(),
-
-                                            dep_time: time_to_num(&dep_time.date),
-                                            arr_time: time_to_num(&arr_time.date)
-                                        };
-
-                                        if cur_stops[i] != conn {
-                                            trip_updates.push(TripUpdate::UpdateConnection {
-                                                trip: cur_trip.clone(),
-                                                connection_old: cur_stops[i].clone(),
-                                                connection_new: conn.clone()
-                                            });
-
-                                            cur_stops[i] = conn;
-                                        }
-
-                                        i += 1;
-                                        prev_stop = next_stop;
-                                    }
-                                }
+                    if &rit_message.message.rit.date != date {
+                        continue;
+                    }
+                    
+                    // Go through each seperate trip in the message
+                    for rit_trip in rit_message.message.rit.trip.parts.iter()
+                        .map(|t| t.to_trip(&stops)).filter(|t| {
+                            if t.is_none() {
+                                println!("{}", &msg.message.as_deref().unwrap()); // Log trips which cannot be serialized
                             }
+                            t.is_some()
+                        }).map(|t| t.unwrap()) {
+
+                        // TODO: One current bug is the fact that date+train id for RIT messages does not always correspond
+                        // to the same date+train id in IFF. This is the case for some trains that are planned in a timeschedule day
+                        // after midnight.
+
+                        // Discussion: Not sure why this is done, this seems like more of a problem of different systems not corresponding
+                        // to the same format making it impossible to exactly match the incoming update to the corresponding trip
+                        // Possible solutions:
+                        // - Rewrite IFF to timetable trips that fully take place the next day, on the next day
+                        // - Match trip using original planned departure time (requires keeping an original lookup of some sort)
+                        // - Acquire information for NS Reizigers to the expected way IFF and RIT should be matched
+                        // The first two solutions are also not guaranteed to be a solution, more research should be done for that.
+                        // Funally enough the same problem is also found on https://treinposities.nl, e.g. for the 1410
+
+                        if let Some(trip) = trips.get_mut(&rit_trip.identifier) {
+                            let rit_trip_set: BTreeSet<Connection> = rit_trip.connections.clone().into_iter().collect();
+
+                            // We try to discover the differences between the rit_trip and the current known trip
+                            let del_connections: Vec<Connection> = trip.difference(&rit_trip_set).map(|x| x.clone()).collect();
+                            let new_connections: Vec<Connection> = rit_trip_set.difference(trip).map(|x| x.clone()).collect();
+
+                            for new_connection in new_connections {
+                                trip.insert(new_connection.clone());
+                                updates.push(TripUpdate::AddConnection { trip: rit_trip.clone(), connection: new_connection });
+                            }
+
+                            for del_connection in del_connections {
+                                trip.remove(&del_connection);
+                                updates.push(TripUpdate::DeleteConnection { trip: rit_trip.clone(), connection: del_connection });
+                            }
+
+                        } else {
+                            // This is a new trip, we add the trip.
+                            trips.insert(rit_trip.identifier, rit_trip.connections.clone().into_iter().collect());
+                            updates.push(TripUpdate::AddTrip { trip: rit_trip });
                         }
                     }
-
-                }
+                },
                 _ => {}
             }
         }
 
         println!("Finished: {}", i + 1000);
     }
-
-    Ok(trip_updates)
-}
-
-fn new_trip_from_rit(rit: &RITLogicalPart, stops: &HashMap<String, usize>) -> Trip {
-    let mut connections = vec![];
-
-    let mut prev_stop = &rit.stops[0];
-    for next_stop in &rit.stops[1..] {
-        if next_stop.stopping.iter().find(|s| s.state == RITState::Planned).unwrap().stopping {
-            connections.push(Connection {
-                dep_stop: *stops.get(&prev_stop.station.code.to_lowercase()).unwrap(),
-                arr_stop: *stops.get(&next_stop.station.code.to_lowercase()).unwrap(),
-
-                dep_time: time_to_num(&prev_stop.dep_time.iter().find(|s| s.state == RITState::Planned).unwrap().date),
-                arr_time: time_to_num(&next_stop.arr_time.iter().find(|s| s.state == RITState::Planned).unwrap().date)
-            });
-            prev_stop = next_stop;
-        }
-    }
-
-    Trip {
-        identifier: rit.trip_id,
-        connections
-    }
-}
-
-fn time_to_num(datetime: &DateTime<Local>) -> u32 {
-    (if datetime.day() == 16 { // TODO FIX this is a hack which only works in this specific instance due to how the IFF timetable works.
-        240000u32
-    } else {
-        0u32
-    }) + datetime.time().format("%H%M%S").to_string().parse::<u32>().unwrap()
+    
+    Ok(updates)
 }

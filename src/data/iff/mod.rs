@@ -2,7 +2,7 @@ pub mod types;
 
 use std::{collections::{HashMap, HashSet}, error::Error, fmt::Debug, io::{self, Cursor, Read}, iter::{FromIterator, Peekable}, ops::Range};
 
-use chrono::{Duration, NaiveDate};
+use chrono::{DateTime, Duration, Local, NaiveDate, TimeZone};
 use smol_str::SmolStr;
 use zip::{ZipArchive, result::ZipError};
 use lazy_static::lazy_static;
@@ -347,33 +347,35 @@ impl crate::types::Stop for IFFStop {
     }
 }
 
-pub fn get_timetable_for_day(date: NaiveDate) -> Result<Timetable, Box<dyn Error>> {
+pub fn get_timetable_for_day(date: &NaiveDate) -> Result<Timetable, Box<dyn Error>> {
 
-    fn query_to_trips(connections: Vec<QueryConnection>, stops: &HashMap<&String, usize>, service_ids: &Vec<(usize, Range<usize>)>) -> Vec<Trip> {
+    fn query_to_trips(connections: Vec<QueryConnection>, stops: &HashMap<&String, usize>, service_ids: &Vec<(usize, Range<usize>)>, datetime: &DateTime<Local>) -> Vec<Trip> {
         service_ids.iter().map(|(id, range)| {
             Trip {
                 identifier: *id,
-                connections: query_to_trip(&connections[range.clone()], &stops)
+                connections: query_to_trip(&connections[range.clone()], &stops, datetime)
             }
         }).collect()
     }
 
-    fn query_to_trip(query_connections: &[QueryConnection], stops: &HashMap<&String, usize>) -> Vec<Connection> {
+    fn query_to_trip(query_connections: &[QueryConnection], stops: &HashMap<&String, usize>, datetime: &DateTime<Local>) -> Vec<Connection> {
         let mut connections = vec![];
         let mut prev_connection = &query_connections[0];
         for next_connection in &query_connections[1..] {
+
+            let dep_time = prev_connection.dep_time.unwrap() as i64;
+            let arr_time = if let Some(arr_time) = next_connection.arr_time {
+                arr_time
+            } else {
+                next_connection.dep_time.unwrap()
+            } as i64;
+
             connections.push(Connection {
                 dep_stop: *stops.get(&prev_connection.station_code).unwrap(),
                 arr_stop: *stops.get(&next_connection.station_code).unwrap(),
                 
-                dep_time: prev_connection.dep_time.unwrap() as u32 * 100,
-                arr_time: {
-                    if let Some(arr_time) = next_connection.arr_time {
-                        arr_time
-                    } else {
-                        next_connection.dep_time.unwrap()
-                    }
-                } as u32 * 100
+                dep_time: (*datetime + Duration::hours(dep_time / 100) + Duration::minutes(dep_time % 100)).timestamp() as u32,
+                arr_time: (*datetime + Duration::hours(arr_time / 100) + Duration::minutes(arr_time % 100)).timestamp() as u32
             });
             prev_connection = next_connection;
         }
@@ -414,6 +416,7 @@ pub fn get_timetable_for_day(date: NaiveDate) -> Result<Timetable, Box<dyn Error
         .collect();
 
     let stops_lookup: HashMap<&String, usize> = stops.iter().map(|(stop, id)| (&stop.code, *id)).collect();
+    let datetime = Local.from_utc_date(&date).and_hms(0, 0, 0);
 
     let trips = diesel::sql_query(include_str!("timetable_for_day.sql"))
         .bind::<Date, _>(&date)
@@ -421,7 +424,7 @@ pub fn get_timetable_for_day(date: NaiveDate) -> Result<Timetable, Box<dyn Error
         .into_iter()
         .group_by(|stop| stop.service_id)
         .into_iter()
-        .map(|(id, connections)| query_to_trips(connections.collect(), &stops_lookup, service_ids.get(&(id as usize)).unwrap()))
+        .map(|(id, connections)| query_to_trips(connections.collect(), &stops_lookup, service_ids.get(&(id as usize)).unwrap(), &datetime))
         .flatten().collect::<Vec<Trip>>();
 
     Ok(Timetable {
