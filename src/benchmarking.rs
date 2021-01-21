@@ -11,7 +11,8 @@ struct RouteBench {
     algorithm: String,
     live: bool,
     distance: Option<f64>,
-    time_in_ns: u128
+    time_in_ns: u128,
+    succes: bool
 }
 
 #[derive(Serialize, Debug)]
@@ -45,7 +46,7 @@ fn bench_algorithm<'a>(data_set: &str, benchable: &Box<dyn Benchable<'a> + 'a>, 
     for (&stop1, place1) in timetable.stops.iter().take(100) {
         for (&stop2, place2) in timetable.stops.iter().skip(100).take(100) {
             let before = Instant::now();
-            benchable.find_earliest_arrival(stop1, stop2, 120000);
+            let r = benchable.find_earliest_arrival(stop1, stop2, 120000);
             let time = before.elapsed();
             times.push(RouteBench {
                 data_set: data_set.to_string(),
@@ -53,6 +54,7 @@ fn bench_algorithm<'a>(data_set: &str, benchable: &Box<dyn Benchable<'a> + 'a>, 
                 live: false,
                 distance: place1.distance(&place2),
                 time_in_ns: time.as_nanos(),
+                succes: r.is_some()
             });
         }
     }
@@ -98,7 +100,7 @@ fn bench_algorithm_live<'a>(data_set: &str, benchable: &mut Box<dyn BenchableLiv
     for (&stop1, place1) in timetable.stops.iter().take(100) {
         for (&stop2, place2) in timetable.stops.iter().skip(100).take(100) {
             let before = Instant::now();
-            benchable.find_earliest_arrival(stop1, stop2, 120000);
+            let r = benchable.find_earliest_arrival(stop1, stop2, 120000);
             let time = before.elapsed();
 
             route_times.push(RouteBench {
@@ -106,7 +108,8 @@ fn bench_algorithm_live<'a>(data_set: &str, benchable: &mut Box<dyn BenchableLiv
                 data_set: data_set.to_string(),
                 algorithm: benchable.name().to_string(),
                 distance: place1.distance(place2),
-                time_in_ns: time.as_nanos(), 
+                time_in_ns: time.as_nanos(),
+                succes: r.is_some()
             });
 
             for _ in 0..updates_to_perform_per_iteration {
