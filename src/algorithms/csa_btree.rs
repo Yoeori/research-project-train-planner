@@ -76,7 +76,8 @@ impl<'a> Benchable<'a> for CSABTree<'a> {
                 dep_stop: MAX_STATIONS,
                 arr_stop: MAX_STATIONS,
                 dep_time: dep_time,
-                arr_time: dep_time
+                arr_time: dep_time,
+                trip_id: 0
             }..), arr_stop, &mut earliest_arrival, &mut in_connection);
         }
 

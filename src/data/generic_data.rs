@@ -28,7 +28,11 @@ pub fn get_data() -> Result<Timetable, Box<dyn Error>> {
     let mut connections = String::new();
     data.read_to_string(&mut connections)?;
 
-    let connections: Vec<Connection> = connections.split("\n").filter(|e| !e.is_empty()).map(|e| Connection::parse_from_string(e)).collect::<Result<Vec<_>, _>>()?;
+    let connections: Vec<Connection> = connections.split("\n")
+        .filter(|e| !e.is_empty())
+        .map(|e| Connection::parse_from_string(e, 0))
+        .collect::<Result<Vec<_>, _>>()?;
+
     let stops = fs::read_to_string("data/stations").unwrap().split("\n")
         .map(|e| SimpleStop { id: e.parse::<usize>().unwrap() })
         .map(|e| (e.id, Box::new(e) as Box<dyn Stop>))

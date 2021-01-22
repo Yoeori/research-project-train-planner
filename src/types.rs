@@ -18,7 +18,9 @@ pub struct Connection {
     pub arr_stop: usize,
     
     pub dep_time: u32,
-    pub arr_time: u32
+    pub arr_time: u32,
+
+    pub trip_id: usize
 }
 
 impl Ord for Connection {
@@ -37,7 +39,7 @@ impl PartialOrd for Connection {
 }
 
 impl Connection {
-    pub fn parse_from_string(line: &str) -> Result<Connection, Box<dyn Error + 'static>> {
+    pub fn parse_from_string(line: &str, trip_id: usize) -> Result<Connection, Box<dyn Error>> {
         let mut splitted = line.split(" ").map(|t| { t.parse::<u32>() });
 
         Ok(Connection {
@@ -45,6 +47,7 @@ impl Connection {
             arr_stop: splitted.next().ok_or("Missing arr_stop")?? as usize,
             dep_time: splitted.next().ok_or("Missing dep_time")??,
             arr_time: splitted.next().ok_or("Missing arr_time")??,
+            trip_id
         })
     }
 }

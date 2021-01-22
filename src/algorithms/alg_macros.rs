@@ -11,11 +11,11 @@ macro_rules! alg_test {
                 use std::collections::HashMap;
                 // Very simple test, this doesnt prove anything :(
                 let connections = vec![
-                    Connection { dep_stop: 0, arr_stop: 1, dep_time: 1, arr_time: 4 },
-                    Connection { dep_stop: 1, arr_stop: 2, dep_time: 5, arr_time: 9 },
-                    Connection { dep_stop: 2, arr_stop: 3, dep_time: 10, arr_time: 14 },
-                    Connection { dep_stop: 3, arr_stop: 4, dep_time: 15, arr_time: 19 },
-                    Connection { dep_stop: 4, arr_stop: 5, dep_time: 20, arr_time: 25 },
+                    Connection { dep_stop: 0, arr_stop: 1, dep_time: 1, arr_time: 4, trip_id: 0 },
+                    Connection { dep_stop: 1, arr_stop: 2, dep_time: 5, arr_time: 9, trip_id: 0 },
+                    Connection { dep_stop: 2, arr_stop: 3, dep_time: 10, arr_time: 14, trip_id: 0 },
+                    Connection { dep_stop: 3, arr_stop: 4, dep_time: 15, arr_time: 19, trip_id: 0 },
+                    Connection { dep_stop: 4, arr_stop: 5, dep_time: 20, arr_time: 25, trip_id: 0 },
                 ];
 
                 let timetable = Timetable {

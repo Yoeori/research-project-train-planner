@@ -179,18 +179,18 @@ mod tests {
     #[test]
     fn bin_search() {
         let connections1 = vec![
-            &Connection { dep_stop: 0, arr_stop: 0, dep_time: 0, arr_time: 0 },
-            &Connection { dep_stop: 0, arr_stop: 0, dep_time: 5, arr_time: 0 },
-            &Connection { dep_stop: 0, arr_stop: 0, dep_time: 10, arr_time: 0 },
-            &Connection { dep_stop: 0, arr_stop: 0, dep_time: 15, arr_time: 0 },
-            &Connection { dep_stop: 0, arr_stop: 0, dep_time: 20, arr_time: 0 },
+            &Connection { dep_stop: 0, arr_stop: 0, dep_time: 0, arr_time: 0, trip_id: 0 },
+            &Connection { dep_stop: 0, arr_stop: 0, dep_time: 5, arr_time: 0, trip_id: 0 },
+            &Connection { dep_stop: 0, arr_stop: 0, dep_time: 10, arr_time: 0, trip_id: 0 },
+            &Connection { dep_stop: 0, arr_stop: 0, dep_time: 15, arr_time: 0, trip_id: 0 },
+            &Connection { dep_stop: 0, arr_stop: 0, dep_time: 20, arr_time: 0, trip_id: 0 },
         ];
 
         let connections2 = vec![
-            &Connection { dep_stop: 0, arr_stop: 0, dep_time: 0, arr_time: 0 },
-            &Connection { dep_stop: 0, arr_stop: 0, dep_time: 5, arr_time: 0 },
-            &Connection { dep_stop: 0, arr_stop: 0, dep_time: 10, arr_time: 0 },
-            &Connection { dep_stop: 0, arr_stop: 0, dep_time: 15, arr_time: 0 },
+            &Connection { dep_stop: 0, arr_stop: 0, dep_time: 0, arr_time: 0, trip_id: 0 },
+            &Connection { dep_stop: 0, arr_stop: 0, dep_time: 5, arr_time: 0, trip_id: 0 },
+            &Connection { dep_stop: 0, arr_stop: 0, dep_time: 10, arr_time: 0, trip_id: 0 },
+            &Connection { dep_stop: 0, arr_stop: 0, dep_time: 15, arr_time: 0, trip_id: 0 },
         ];
 
         assert_eq!(bin_search_arr(&connections1, 0).unwrap().dep_time, 0);

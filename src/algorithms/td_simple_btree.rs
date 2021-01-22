@@ -29,7 +29,8 @@ fn bin_search_arr<'a>(connections: &BTreeSet<&'a Connection>, start_time: u32) -
         dep_time: start_time,
         arr_time: 0,
         dep_stop: 0,
-        arr_stop: 0
+        arr_stop: 0,
+        trip_id: 0
     }..).next().map(|x| *x)
 }
 
@@ -194,17 +195,17 @@ mod tests {
     #[test]
     fn bin_search() {      
         let mut connections1 = BTreeSet::new();
-        connections1.insert(&Connection { dep_stop: 0, arr_stop: 0, dep_time: 0, arr_time: 0 });
-        connections1.insert(&Connection { dep_stop: 0, arr_stop: 0, dep_time: 5, arr_time: 0 });
-        connections1.insert(&Connection { dep_stop: 0, arr_stop: 0, dep_time: 10, arr_time: 0 });
-        connections1.insert(&Connection { dep_stop: 0, arr_stop: 0, dep_time: 15, arr_time: 0 });
-        connections1.insert(&Connection { dep_stop: 0, arr_stop: 0, dep_time: 20, arr_time: 0 });
+        connections1.insert(&Connection { dep_stop: 0, arr_stop: 0, dep_time: 0, arr_time: 0, trip_id: 0 });
+        connections1.insert(&Connection { dep_stop: 0, arr_stop: 0, dep_time: 5, arr_time: 0, trip_id: 0 });
+        connections1.insert(&Connection { dep_stop: 0, arr_stop: 0, dep_time: 10, arr_time: 0, trip_id: 0 });
+        connections1.insert(&Connection { dep_stop: 0, arr_stop: 0, dep_time: 15, arr_time: 0, trip_id: 0 });
+        connections1.insert(&Connection { dep_stop: 0, arr_stop: 0, dep_time: 20, arr_time: 0, trip_id: 0 });
 
         let mut connections2 = BTreeSet::new();
-        connections2.insert(&Connection { dep_stop: 0, arr_stop: 0, dep_time: 0, arr_time: 0 });
-        connections2.insert(&Connection { dep_stop: 0, arr_stop: 0, dep_time: 5, arr_time: 0 });
-        connections2.insert(&Connection { dep_stop: 0, arr_stop: 0, dep_time: 10, arr_time: 0 });
-        connections2.insert(&Connection { dep_stop: 0, arr_stop: 0, dep_time: 15, arr_time: 0 });
+        connections2.insert(&Connection { dep_stop: 0, arr_stop: 0, dep_time: 0, arr_time: 0, trip_id: 0 });
+        connections2.insert(&Connection { dep_stop: 0, arr_stop: 0, dep_time: 5, arr_time: 0 , trip_id: 0});
+        connections2.insert(&Connection { dep_stop: 0, arr_stop: 0, dep_time: 10, arr_time: 0, trip_id: 0 });
+        connections2.insert(&Connection { dep_stop: 0, arr_stop: 0, dep_time: 15, arr_time: 0, trip_id: 0 });
 
         assert_eq!(bin_search_arr(&connections1, 0).unwrap().dep_time, 0);
         assert_eq!(bin_search_arr(&connections1, 20).unwrap().dep_time, 20);

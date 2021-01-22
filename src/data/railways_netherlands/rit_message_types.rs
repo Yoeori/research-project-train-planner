@@ -97,7 +97,9 @@ impl RITLogicalPart {
                         arr_stop: *stops.get(&next_stop.station.code.to_lowercase())?,
 
                         dep_time: prev_stop.dep_time.iter().find(|s| s.state == RITState::Current)?.date.timestamp() as u32,
-                        arr_time: next_stop.arr_time.iter().find(|s| s.state == RITState::Current)?.date.timestamp() as u32
+                        arr_time: next_stop.arr_time.iter().find(|s| s.state == RITState::Current)?.date.timestamp() as u32,
+
+                        trip_id: self.trip_id
                     });
                     prev_saved_stop = Some(next_stop);
                 } else {
