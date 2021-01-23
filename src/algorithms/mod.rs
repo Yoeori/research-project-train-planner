@@ -3,7 +3,7 @@ pub mod td_simple_vec;
 pub mod td_simple_btree;
 pub mod csa_btree;
 pub mod csa_vec;
-// mod raptor;
+pub mod raptor;
 
 use td_simple_btree::TDSimpleBTree;
 use td_simple_vec::TDSimpleVec;

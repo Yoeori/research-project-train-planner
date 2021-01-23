@@ -59,6 +59,19 @@ pub struct Trip {
     pub connections: Vec<Connection>
 }
 
+impl Ord for Trip {
+    fn cmp(&self, other: &Trip) -> Ordering {
+        self.connections[0].dep_time.cmp(&other.connections[0].dep_time)
+            .then_with(|| self.identifier.cmp(&other.identifier))
+    }
+}
+
+impl PartialOrd for Trip {
+    fn partial_cmp(&self, other: &Trip) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
 // As defined, however trip based for identification purposes
 #[derive(Debug, Clone)]
 #[allow(dead_code)]

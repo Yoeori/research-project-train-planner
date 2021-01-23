@@ -1,3 +1,5 @@
+use std::{collections::HashSet, ops::Range};
+
 use crate::types::{Timetable, TripResult, TripUpdate};
 
 pub trait Benchable<'a> {
@@ -11,7 +13,5 @@ pub trait BenchableLive<'a>: Benchable<'a> {
 }
 
 pub trait BenchableProfile<'a>: Benchable<'a> {
-    // TODO
+    fn find_earliest_arrival_profile_set(&self, dep_stop: usize, arr_stop: usize, range: Range<u32>) -> HashSet<TripResult>;
 }
-
-// See https://play.rust-lang.org/?gist=5cc19fdf03a6624e66a84488e72e26a4&version=stable for possible implentation of generalized test for multiple benchables.
