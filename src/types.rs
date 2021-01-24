@@ -8,8 +8,10 @@
 //  only one stop for a set of 
 // A timetable can also be updated with live information, either changing connections, deleting them or adding new connections (and associated trips)
 
-use std::{cmp::Ordering, collections::HashMap, error::Error, fmt::Debug};
+use std::{cmp::Ordering, collections::HashMap, error::Error, fmt::{self, Debug}};
 use std::hash::Hash;
+
+use chrono::{Local, TimeZone};
 
 /// As defined
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
@@ -78,9 +80,8 @@ impl PartialOrd for Trip {
 pub enum TripUpdate {
     DeleteTrip { trip: Trip },
     AddTrip { trip: Trip },
-    AddConnection { trip: Trip, connection: Connection },
-    DeleteConnection { trip: Trip, connection: Connection },
-    UpdateConnection { trip: Trip, connection_old: Connection, connection_new: Connection },
+    AddConnection { old_trip: Trip, new_trip: Trip, connection: Connection },
+    DeleteConnection { old_trip: Trip, new_trip: Trip, connection: Connection },
 }
 
 // As defined
@@ -106,20 +107,98 @@ pub trait Stop: Debug {
 pub struct Timetable {
     pub stops: HashMap<usize, Box<dyn Stop>>,
     pub trips: Vec<Trip>,
-    //pub footpaths: HashMap<usize, HashMap<usize, usize>>
-    // Connections and stations are defined within the trips and footpaths.
+    pub footpaths: HashMap<usize, Vec<(usize, u32)>> // Stop a to stop b => time
 }
 
-// TODO this will later be an tick-tock pair of (Trip, connection index start, connection index end) and footpaths
-// For no there are not footpaths
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub enum TripPart<'a> {
+    Connection(&'a Connection, &'a Connection),
+    Footpath(usize, usize, u32)
+}
+
+impl TripPart<'_> {
+    fn from(&self) -> usize {
+        match self {
+            TripPart::Connection(a, _) => a.dep_stop,
+            TripPart::Footpath(a, _, _) => *a
+        }
+    }
+
+    fn to(&self) -> usize {
+        match self {
+            TripPart::Connection(_, b) => b.arr_stop,
+            TripPart::Footpath(_, b, _) => *b
+        }
+    }
+
+    fn format_fancy(&self, stops: &HashMap<usize, Box<dyn Stop>>) -> String {
+        match self {
+            TripPart::Connection(a, b) => format!(
+                "Depart from {} at {}, and arrive at {} at {}", 
+                stops.get(&a.dep_stop).unwrap().to_string(), Local.timestamp(a.dep_time as i64, 0),
+                stops.get(&b.arr_stop).unwrap().to_string(), Local.timestamp(b.arr_time as i64, 0)
+            ),
+            TripPart::Footpath(a, b, duration) => format!(
+                "Walk from {} to {} taking {} mins",
+                stops.get(a).unwrap().to_string(), stops.get(b).unwrap().to_string(), duration / 60
+            )
+        }
+    }
+}
+
+impl fmt::Display for TripPart<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            TripPart::Connection(a, b) => write!(
+                f, "Depart from {} at {}, and arrive at {} at {}", 
+                a.dep_stop, a.dep_time, b.arr_stop, b.arr_time
+            ),
+            TripPart::Footpath(a, b, duration) => write!(
+                f, "Walk from {} to {} taking {} mins",
+                a, b, duration / 60
+            )
+        }
+    }
+}
+
+// Journey as defined in the paper
 #[derive(Debug, PartialEq, Eq)]
 pub struct TripResult<'a> {
-    pub connections: Vec<&'a Connection>
+    pub parts: Vec<TripPart<'a>>
 }
 
 impl TripResult<'_> {
     #[allow(dead_code)]
     pub fn arrival(&self) -> u32 {
-        self.connections.last().unwrap().arr_time
+        if let Some(TripPart::Connection(_, b)) = self.parts.last() {
+            return b.arr_time;
+        }
+
+        panic!("Trip result did not contain a final connection!");
+    }
+
+    pub fn format_fancy(&self, stops: &HashMap<usize, Box<dyn Stop>>) -> String {
+        let mut res = format!(
+            "Trip from {} to {}\n", 
+            stops.get(&self.parts.first().unwrap().from()).unwrap().to_string(), 
+            stops.get(&self.parts.last().unwrap().to()).unwrap().to_string()
+        );
+
+        for part in &self.parts {
+            res.push_str(&format!("{}\n", part.format_fancy(stops))[..]);
+        }
+
+        res
+    }
+}
+
+impl fmt::Display for TripResult<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Trip from {} to {}\n", self.parts.first().unwrap().from(), self.parts.last().unwrap().to())?;
+        for part in &self.parts[..(self.parts.len()-1)] {
+            write!(f, "{}\n", part)?
+        }
+
+        write!(f, "{}", self.parts[self.parts.len()-1])
     }
 }

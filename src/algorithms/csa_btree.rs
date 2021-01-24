@@ -1,50 +1,13 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap};
 
-use crate::{benchable::{Benchable, BenchableLive}, types::{Connection, Timetable, TripResult, TripUpdate}};
+use crate::{benchable::{Benchable, BenchableLive}, types::{Connection, Timetable, TripPart, TripResult, TripUpdate}};
 
 pub const MAX_STATIONS: usize = 100000;
 
-fn main_loop<'a>(timetable: impl Iterator<Item = &'a &'a Connection>, arr_stop: usize, earliest_arrival: &mut [u32], in_connection: &mut [Option<&'a Connection>]) {
-    let mut earliest = std::u32::MAX;
-
-    for connection in timetable {
-        if connection.dep_time >= earliest_arrival[connection.dep_stop] &&
-                connection.arr_time < earliest_arrival[connection.arr_stop] {
-            earliest_arrival[connection.arr_stop] = connection.arr_time;
-            in_connection[connection.arr_stop] = Some(&connection);
-
-            if connection.arr_stop == arr_stop && connection.arr_time < earliest {
-                earliest = connection.arr_time;
-            }
-        } else if connection.arr_time > earliest {
-            break;
-        }
-    }
-}
-
-fn get_result<'a>(in_connection: &[Option<&'a Connection>], arrival_station: usize) -> Option<TripResult<'a>> {
-    if in_connection[arrival_station] == None {
-        None
-    } else {
-        let mut route = Vec::new();
-
-        let mut last_station = arrival_station;
-        while let Some(connection) = in_connection[last_station] {
-            route.push(connection);
-            last_station = connection.dep_stop;
-        }
-
-        route.reverse();
-
-        return Some(TripResult {
-            connections: route
-        });
-    }
-}
-
 #[derive(Debug)]
 pub struct CSABTree<'a> {
-    timetable: BTreeSet<&'a Connection>
+    connections: BTreeSet<&'a Connection>,
+    footpaths: &'a HashMap<usize, Vec<(usize, u32)>>
 }
 
 // Based on https://github.com/trainline-eu/csa-challenge/blob/master/csa.rs (WTFPL license)
@@ -54,34 +17,67 @@ impl<'a> Benchable<'a> for CSABTree<'a> {
     }
 
     fn new(timetable: &'a Timetable) -> Self {
-        let mut our_timetable = BTreeSet::new();
+        let mut connections = BTreeSet::new();
         for trip in &timetable.trips {
-            our_timetable.extend(&trip.connections);
+            connections.extend(&trip.connections);
         }
 
         CSABTree {
-            timetable: our_timetable
+            connections,
+            footpaths: &timetable.footpaths
         }
     }
 
     fn find_earliest_arrival(&self, dep_stop: usize, arr_stop: usize, dep_time: u32) -> Option<TripResult> {
-
-        let mut in_connection = vec!(None; MAX_STATIONS);
         let mut earliest_arrival = vec!(std::u32::MAX; MAX_STATIONS);
+        let mut in_connection = vec!(None; MAX_STATIONS);
+        let mut journeys = vec!(None; MAX_STATIONS);
 
-        earliest_arrival[dep_stop as usize] = dep_time as u32;
-
-        if dep_stop < MAX_STATIONS && arr_stop < MAX_STATIONS {
-            main_loop(self.timetable.range(Connection {
-                dep_stop: MAX_STATIONS,
-                arr_stop: MAX_STATIONS,
-                dep_time: dep_time,
-                arr_time: dep_time,
-                trip_id: 0
-            }..), arr_stop, &mut earliest_arrival, &mut in_connection);
+        for &(f_stop, dur) in self.footpaths.get(&dep_stop).unwrap() {
+            earliest_arrival[f_stop] = dep_time + dur;
         }
 
-        get_result(&in_connection, arr_stop)
+        for &conn in self.connections.range(Connection {
+            dep_stop: MAX_STATIONS,
+            arr_stop: MAX_STATIONS,
+            dep_time,
+            arr_time: dep_time,
+            trip_id: 0
+        }..) {
+            if earliest_arrival[arr_stop] <= conn.dep_time {
+                break;
+            }
+
+            if in_connection[conn.trip_id].is_some() || earliest_arrival[conn.dep_stop] <= conn.dep_time {
+                if in_connection[conn.trip_id].is_none() {
+                    in_connection[conn.trip_id] = Some(conn);
+                }
+
+                for &(f_stop, dur) in self.footpaths.get(&conn.arr_stop).unwrap() {
+                    if conn.arr_time + dur < earliest_arrival[f_stop] {
+                        earliest_arrival[f_stop] = conn.arr_time + dur;
+                        journeys[f_stop] = Some((in_connection[conn.trip_id].unwrap(), conn, (conn.arr_stop, f_stop, dur)))
+                    }
+                }
+            }
+        }
+
+        let mut journey = vec![];
+        let mut cur = arr_stop;
+        while let Some((con1, con2, footpath)) = journeys[cur] {
+            journey.push(TripPart::Footpath(footpath.0, footpath.1, footpath.2));
+            journey.push(TripPart::Connection(con1, con2));
+            cur = con1.dep_stop;
+        }
+
+        journey.reverse();
+
+        // We do not care about the final footpath
+        journey.remove(journey.len()-1);
+
+        return Some(TripResult {
+            parts: journey
+        });
     }
 
 }
@@ -91,23 +87,19 @@ impl<'a> BenchableLive<'a> for CSABTree<'a> {
         match update {
             TripUpdate::DeleteTrip { trip } => {
                 for conn in trip.connections.iter() {
-                    self.timetable.remove(conn);
+                    self.connections.remove(conn);
                 }
             }
             TripUpdate::AddTrip { trip } => {
                 for conn in trip.connections.iter() {
-                    self.timetable.insert(conn);
+                    self.connections.insert(conn);
                 }
             }
-            TripUpdate::AddConnection { trip: _, connection } => {
-                self.timetable.insert(connection);
+            TripUpdate::AddConnection { old_trip: _, new_trip: _, connection } => {
+                self.connections.insert(connection);
             }
-            TripUpdate::DeleteConnection { trip: _, connection } => {
-                self.timetable.remove(connection);
-            }
-            TripUpdate::UpdateConnection { trip: _, connection_old, connection_new } => {
-                self.timetable.remove(connection_old);
-                self.timetable.insert(connection_new);
+            TripUpdate::DeleteConnection { old_trip: _, new_trip: _, connection } => {
+                self.connections.remove(connection);
             }
         }
     }

@@ -2,7 +2,7 @@ use std::collections::{BTreeSet, HashMap};
 use std::collections::BinaryHeap;
 use std::cmp::Ordering;
 
-use crate::{benchable::{Benchable, BenchableLive}, types::{Timetable, TripResult, TripUpdate}};
+use crate::{benchable::{Benchable, BenchableLive}, types::{Timetable, TripPart, TripResult, TripUpdate}};
 use crate::types::Connection;
 
 pub const MAX_STATIONS: usize = 100000;
@@ -10,7 +10,8 @@ pub const MAX_STATIONS: usize = 100000;
 #[derive(Debug)]
 pub struct Station<'a> {
     station: usize,
-    neighbours: HashMap<usize, BTreeSet<&'a Connection>>
+    neighbours: HashMap<usize, BTreeSet<&'a Connection>>,
+    footpaths: HashMap<usize, u32>
 }
 
 impl<'a> Station<'a> {
@@ -44,14 +45,15 @@ impl<'a> Benchable<'a> for TDSimpleBTree<'a> {
         "Simple time-dependent graph approach with Binary Tree"
     }
 
-    fn new(trips: &'a Timetable) -> Self {
+    fn new(timetable: &'a Timetable) -> Self {
         let mut stations: HashMap<usize, Station> = HashMap::new();
 
-        for connection in trips.trips.iter().map(|t| &t.connections).flatten() {
+        for connection in timetable.trips.iter().map(|t| &t.connections).flatten() {
             if !stations.contains_key(&connection.dep_stop) {
                 stations.insert(connection.dep_stop, Station {
                     station: connection.dep_stop,
-                    neighbours: HashMap::new()
+                    neighbours: HashMap::new(),
+                    footpaths: timetable.footpaths.get(&connection.dep_stop).unwrap().clone().into_iter().collect()
                 });
             }
 
@@ -92,9 +94,9 @@ impl<'a> Benchable<'a> for TDSimpleBTree<'a> {
             }
         }
 
-        let mut dist: Vec<u32> = vec![u32::MAX; MAX_STATIONS];
+        let mut dist: Vec<u32> = vec![u32::MAX - 3600 * 24; MAX_STATIONS];
         let mut heap: BinaryHeap<State> = BinaryHeap::new();
-        let mut prev: Vec<Option<&Connection>> = vec![None; MAX_STATIONS];
+        let mut prev: Vec<Option<TripPart>> = vec![None; MAX_STATIONS];
 
         dist[dep_stop] = dep_time;
         heap.push(State {
@@ -107,17 +109,51 @@ impl<'a> Benchable<'a> for TDSimpleBTree<'a> {
             // Alternatively we could have continued to find shortest paths for whole station graph
             if station == arr_stop {
                 // Create trip
-                let mut trip: Vec<&Connection> = Vec::new();
+                let mut parts: Vec<TripPart> = Vec::new();
                 let mut cur = arr_stop;
-                while let Some(conn) = prev[cur] {
-                    trip.push(conn);
-                    cur = conn.dep_stop;
+                let mut last_part: Option<TripPart> = None;
+
+                while let Some(trip) = &prev[cur] {
+                    dbg!(trip);
+
+                    match trip {
+                        TripPart::Connection(c, d) => {
+                            if let Some(TripPart::Connection(a, b)) = last_part {
+                                if c.trip_id == b.trip_id {
+                                    last_part = Some(TripPart::Connection(c, b));
+                                } else {
+                                    parts.push(TripPart::Connection(a, b));
+                                    parts.push(TripPart::Footpath(a.dep_stop, a.dep_stop, 0));
+                                    last_part = Some(TripPart::Connection(c, d))
+                                }
+                            } else {
+                                last_part = Some(trip.clone())
+                            }
+
+                            cur = c.dep_stop;
+                        },
+                        TripPart::Footpath(a, b, dur) => {
+                            if let Some(TripPart::Connection(a, b)) = last_part {
+                                parts.push(TripPart::Connection(a, b));
+                                last_part = None;
+                            }
+                            parts.push(TripPart::Footpath(*a, *b, *dur));
+                            
+                            cur = *a;
+                        }
+                    }
                 }
 
-                trip.reverse();
+                if let Some(TripPart::Connection(a, b)) = last_part {
+                    parts.push(TripPart::Connection(a, b));
+                }
+
+                parts.reverse();
+
+                // dbg!(&parts);
 
                 return Some(TripResult {
-                    connections: trip
+                    parts
                 });
             }
 
@@ -135,8 +171,17 @@ impl<'a> Benchable<'a> for TDSimpleBTree<'a> {
                     if edge.arr_time < dist[edge.arr_stop] {
                         heap.push(State { cost: edge.arr_time, station: edge.arr_stop });
                         dist[edge.arr_stop] = edge.arr_time;
-                        prev[edge.arr_stop] = Some(edge);
+                        prev[edge.arr_stop] = Some(TripPart::Connection(edge, edge));
                     }
+                }
+            }
+
+            // Footpaths
+            for (&neighbour, &dur) in &self.data.get(&station).unwrap().footpaths {
+                if dist[station] + dur < dist[neighbour] {
+                    heap.push(State { cost: dist[station] + dur, station: neighbour });
+                    dist[neighbour] = dist[station] + dur;
+                    prev[neighbour] = Some(TripPart::Footpath(station, neighbour, dur));
                 }
             }
         };
@@ -172,15 +217,11 @@ impl<'a> BenchableLive<'a> for TDSimpleBTree<'a> {
                     add_connection(self, conn);
                 }
             }
-            TripUpdate::AddConnection { trip: _, connection } => {
+            TripUpdate::AddConnection { old_trip: _, new_trip: _, connection } => {
                 add_connection(self, connection);
             }
-            TripUpdate::DeleteConnection { trip: _, connection } => {
+            TripUpdate::DeleteConnection { old_trip: _, new_trip: _, connection } => {
                 delete_connection(self, connection);
-            }
-            TripUpdate::UpdateConnection { trip: _, connection_old, connection_new } => {
-                delete_connection(self, connection_old);
-                add_connection(self, connection_new);
             }
         }
     }

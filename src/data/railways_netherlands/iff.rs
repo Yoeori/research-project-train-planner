@@ -427,8 +427,15 @@ pub fn get_timetable_for_day(date: &NaiveDate) -> Result<Timetable, Box<dyn Erro
         .map(|(id, connections)| query_to_trips(connections.collect(), &stops_lookup, service_ids.get(&(id as usize)).unwrap(), &datetime))
         .flatten().collect::<Vec<Trip>>();
 
+    // Now we create a 'loopback' footpath for each station
+    let mut footpaths = HashMap::new();
+    for (_, &stop) in &stops {
+        footpaths.insert(stop, vec![(stop, 12*60)]);
+    }
+
     Ok(Timetable {
         trips,
-        stops: stops.into_iter().map(|(stop, i)| (i, Box::new(stop) as Box<dyn crate::types::Stop>)).collect()
+        stops: stops.into_iter().map(|(stop, i)| (i, Box::new(stop) as Box<dyn crate::types::Stop>)).collect(),
+        footpaths
     })
 }

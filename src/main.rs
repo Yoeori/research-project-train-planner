@@ -120,19 +120,17 @@ async fn main() -> Result<(), Box<dyn Error + 'static>> {
         ("example", _) => {
             // Performs an example routing with CSA Vec
             let date = NaiveDate::from_ymd(2021, 1, 15);
+
+            println!("Loading timetable for {:?}", date);
             let timetable = iff::get_timetable_for_day(&date)?;
 
             // Find ID's of amf and esk
             let amf = timetable.stops.iter().find(|(_, stop)| stop.to_string() == "amf").unwrap().0;
             let esk = timetable.stops.iter().find(|(_, stop)| stop.to_string() == "esk").unwrap().0;
 
-            // let alg = algorithms::csa_vec::CSAVec::new(&timetable);
-            let mut alg = algorithms::csa_btree::CSABTree::new(&timetable);
+            let mut alg = algorithms::td_simple_btree::TDSimpleBTree::new(&timetable);
             let route = alg.find_earliest_arrival(*esk, *amf, Local.ymd(2021, 1, 15).and_hms(13, 0, 0).timestamp() as u32).unwrap();
-
-            for conn in &route.connections {
-                println!("{:?} at {:?} => {:?} at {:?}", timetable.stops.get(&conn.dep_stop).unwrap(), Local.timestamp(conn.dep_time as i64, 0), timetable.stops.get(&conn.arr_stop).unwrap(), Local.timestamp(conn.arr_time as i64, 0));
-            }
+            println!("{}", route.format_fancy(&timetable.stops));
 
             // Get changes
             let updates = info_plus::read_dvs_to_updates(&date)?;
@@ -140,12 +138,10 @@ async fn main() -> Result<(), Box<dyn Error + 'static>> {
                 alg.update(update);
             }
 
-            let route = alg.find_earliest_arrival(*esk, *amf, Local.ymd(2021, 1, 15).and_hms(13, 0, 0).timestamp() as u32).unwrap();
-
             println!("After updating:");
-            for conn in &route.connections {
-                println!("{:?} at {:?} => {:?} at {:?}", timetable.stops.get(&conn.dep_stop).unwrap(), Local.timestamp(conn.dep_time as i64, 0), timetable.stops.get(&conn.arr_stop).unwrap(), Local.timestamp(conn.arr_time as i64, 0));
-            }
+            let route = alg.find_earliest_arrival(*esk, *amf, Local.ymd(2021, 1, 15).and_hms(13, 0, 0).timestamp() as u32).unwrap();
+            println!("{}", route.format_fancy(&timetable.stops));
+
         }
         _ => {},
     }

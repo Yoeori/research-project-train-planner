@@ -1,11 +1,11 @@
 use std::{collections::{BTreeSet, HashMap, HashSet}, ops::Range, cmp};
 
-use crate::{benchable::{Benchable}, types::{Connection, Timetable, Trip, TripPart, TripResult}};
+use crate::{benchable::{Benchable, BenchableLive}, types::{Connection, Timetable, Trip, TripPart, TripResult, TripUpdate}};
 
 #[derive(Debug)]
 struct Route<'a> {
     stops: Vec<usize>,
-    trips: Vec<&'a Trip>
+    trips: BTreeSet<&'a Trip>
 }
 
 impl<'a> Route<'a> {
@@ -32,31 +32,11 @@ impl<'a> Route<'a> {
     }
 
     fn trip_from(&self, si: usize, start_time: u32) -> Option<&Trip> {
-        let mut left: usize = 0;
-        let mut right: usize = self.trips.len() - 1;
-        let mut ans = None;
-        while left <= right {
-            let mid = (left + right) / 2;
-
-            if &self.trips[mid].connections[si].dep_time < &start_time {
-                left = mid + 1;
-            } else {
-                ans = Some(self.trips[mid]);
-
-                if mid == 0 {
-                    break;
-                }
-
-                right = mid - 1;
-            }
-
-        };
-
-        ans
+        self.trips.iter().find(|t| t.connections[si].dep_time > start_time).map(|x| *x)
     }
 
     fn len(&self) -> usize {
-        self.trips[0].connections.len()
+        self.trips.iter().next().unwrap().connections.len()
     }
 }
 
@@ -64,13 +44,16 @@ const MAX_K: usize = 5;
 const MAX_STATIONS: usize = 100000;
 
 #[derive(Debug)]
-pub struct Raptor<'a> {
+pub struct RaptorBTree<'a> {
     routes: Vec<Route<'a>>,
     stops_routes: HashMap<usize, HashSet<usize>>,
-    footpaths: HashMap<usize, HashMap<usize, u32>>
+    footpaths: HashMap<usize, HashMap<usize, u32>>,
+
+    // For changes, we need to lookup the route it's a part of
+    stops_route: HashMap<Vec<usize>, usize>
 }
 
-impl<'a> Benchable<'a> for Raptor<'a> {
+impl<'a> Benchable<'a> for RaptorBTree<'a> {
 
     fn find_earliest_arrival(&self, dep_stop: usize, arr_stop: usize, dep_time: u32) -> Option<TripResult> {
         let mut earliest_k_arrival: Vec<Vec<u32>> = vec![vec![u32::MAX - 3600 * 4; MAX_K]; MAX_STATIONS];
@@ -192,6 +175,7 @@ impl<'a> Benchable<'a> for Raptor<'a> {
 
         let mut routes: Vec<Route> = vec![];
         let mut stops_routes: HashMap<usize, HashSet<usize>> = HashMap::new();
+        let mut stops_route: HashMap<Vec<usize>, usize> = HashMap::new();
 
         for (vec_route, trips) in routes_map.into_iter() {
             for stop in &vec_route {
@@ -207,18 +191,76 @@ impl<'a> Benchable<'a> for Raptor<'a> {
             }
 
             routes.push(Route {
-                stops: vec_route,
+                stops: vec_route.clone(),
                 trips: trips.into_iter().collect(),
             });
+
+            stops_route.insert(
+                vec_route,
+                routes.len()
+            );
         }
 
-        Raptor {
+        RaptorBTree {
             routes,
             stops_routes,
-            footpaths: timetable.footpaths.clone().into_iter().map(|(p1, p2s)| (p1, p2s.into_iter().collect())).collect()
+            footpaths: timetable.footpaths.clone().into_iter().map(|(p1, p2s)| (p1, p2s.into_iter().collect())).collect(),
+            stops_route
         }
     }
 
 }
 
-alg_test!(Raptor);
+impl<'a> BenchableLive<'a> for RaptorBTree<'a> {
+    fn update(&mut self, update: &'a TripUpdate) {
+        
+        fn get_stops(trip: &Trip) -> Vec<usize> {
+            let mut res = vec![trip.connections[0].dep_stop];
+            for conn in &trip.connections {
+                res.push(conn.arr_stop);
+            }
+            res
+        }
+
+        let mut delete_trip = None;
+        let mut add_trip = None;
+
+        match update {
+            TripUpdate::DeleteTrip { trip } => {
+                delete_trip = Some(trip);
+            }
+            TripUpdate::AddTrip { trip } => {
+                add_trip = Some(trip);
+            }
+            TripUpdate::AddConnection { old_trip, new_trip, connection: _ } => {
+                delete_trip = Some(old_trip);
+                add_trip = Some(new_trip);
+            }
+            TripUpdate::DeleteConnection { old_trip, new_trip, connection: _ } => {
+                delete_trip = Some(old_trip);
+                add_trip = Some(new_trip);
+            }
+        }
+
+        if let Some(trip) = delete_trip {
+            let route = self.routes.get_mut(*self.stops_route.get(&get_stops(trip)).unwrap()).unwrap();
+            route.trips.remove(trip);
+        }
+
+        if let Some(trip) = add_trip {
+            let stops = get_stops(trip);
+            if !self.stops_route.contains_key(&stops) {
+                self.routes.push(Route {
+                    stops: stops.clone(),
+                    trips: BTreeSet::new()
+                });
+                self.stops_route.insert(stops.clone(), self.routes.len());
+            }
+
+            let route = self.routes.get_mut(*self.stops_route.get(&stops).unwrap()).unwrap();
+            route.trips.insert(trip);
+        }
+    }
+}
+
+alg_test!(RaptorBTree);

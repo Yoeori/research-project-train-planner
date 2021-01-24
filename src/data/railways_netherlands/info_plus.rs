@@ -4,7 +4,7 @@ use chrono::NaiveDate;
 use diesel::{dsl::max, prelude::*};
 use quick_xml::de::from_str;
 
-use crate::{data::zeromq, types::{TripUpdate, Connection}};
+use crate::{data::zeromq, types::{Connection, Trip, TripUpdate}};
 use crate::database;
 
 use super::{iff, rit_message_types::RITMessage};
@@ -132,6 +132,18 @@ pub fn read_dvs_to_updates(date: &NaiveDate) -> Result<Vec<TripUpdate>, Box<dyn 
 
                         if let Some(trip) = trips.get_mut(&rit_trip.identifier) {
                             let rit_trip_set: BTreeSet<Connection> = rit_trip.connections.clone().into_iter().collect();
+                            
+                            let old_trip = Trip {
+                                identifier: rit_trip.identifier,
+                                connections: trip.clone().into_iter().collect()
+                            };
+
+                            // Should we remove the whole trip?
+                            if rit_trip.connections.is_empty() {
+                                trip.clear();
+                                updates.push(TripUpdate::DeleteTrip { trip: old_trip.clone() });
+                                continue;
+                            }
 
                             // We try to discover the differences between the rit_trip and the current known trip
                             let del_connections: Vec<Connection> = trip.difference(&rit_trip_set).map(|x| x.clone()).collect();
@@ -139,12 +151,12 @@ pub fn read_dvs_to_updates(date: &NaiveDate) -> Result<Vec<TripUpdate>, Box<dyn 
 
                             for new_connection in new_connections {
                                 trip.insert(new_connection.clone());
-                                updates.push(TripUpdate::AddConnection { trip: rit_trip.clone(), connection: new_connection });
+                                updates.push(TripUpdate::AddConnection { old_trip: old_trip.clone(), new_trip: rit_trip.clone(), connection: new_connection });
                             }
 
                             for del_connection in del_connections {
                                 trip.remove(&del_connection);
-                                updates.push(TripUpdate::DeleteConnection { trip: rit_trip.clone(), connection: del_connection });
+                                updates.push(TripUpdate::DeleteConnection { old_trip: old_trip.clone(), new_trip: rit_trip.clone(), connection: del_connection });
                             }
 
                         } else {

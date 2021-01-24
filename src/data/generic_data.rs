@@ -28,9 +28,13 @@ pub fn get_data() -> Result<Timetable, Box<dyn Error>> {
     let mut connections = String::new();
     data.read_to_string(&mut connections)?;
 
-    let connections: Vec<Connection> = connections.split("\n")
+    let trips: Vec<Trip> = connections.split("\n")
         .filter(|e| !e.is_empty())
         .map(|e| Connection::parse_from_string(e, 0))
+        .enumerate().map(|(identifier, c)| c.map(move |conn| Trip {
+            identifier,
+            connections: vec![conn]
+        }))
         .collect::<Result<Vec<_>, _>>()?;
 
     let stops = fs::read_to_string("data/stations").unwrap().split("\n")
@@ -39,10 +43,8 @@ pub fn get_data() -> Result<Timetable, Box<dyn Error>> {
         .collect::<HashMap<usize, Box<dyn Stop>>>();
 
     Ok(Timetable {
-        trips: vec![Trip {
-            identifier: 0,
-            connections
-        }],
-        stops
+        trips,
+        stops,
+        footpaths: HashMap::new()
     })
 }

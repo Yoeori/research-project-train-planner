@@ -4,9 +4,10 @@ pub mod td_simple_btree;
 pub mod csa_btree;
 pub mod csa_vec;
 pub mod raptor;
+pub mod raptor_btree;
 
-use td_simple_btree::TDSimpleBTree;
-use td_simple_vec::TDSimpleVec;
+// use td_simple_btree::TDSimpleBTree;
+// use td_simple_vec::TDSimpleVec;
 use csa_btree::CSABTree;
 use csa_vec::CSAVec;
 
@@ -18,8 +19,8 @@ pub fn algorithms() -> &'static [for<'a> fn(&'a Timetable) -> Box<dyn Benchable<
     &[
         |t| Box::new(CSABTree::new(t)) as Box<dyn Benchable>,
         |t| Box::new(CSAVec::new(t)) as Box<dyn Benchable>,
-        |t| Box::new(TDSimpleVec::new(t)) as Box<dyn Benchable>,
-        |t| Box::new(TDSimpleBTree::new(t)) as Box<dyn Benchable>
+        // |t| Box::new(TDSimpleVec::new(t)) as Box<dyn Benchable>,
+        // |t| Box::new(TDSimpleBTree::new(t)) as Box<dyn Benchable>
     ]
 }
 
@@ -27,6 +28,6 @@ pub fn algorithms() -> &'static [for<'a> fn(&'a Timetable) -> Box<dyn Benchable<
 pub fn algorithms_live() -> &'static [for<'a> fn(&'a Timetable) -> Box<dyn BenchableLive<'a> + 'a>] {
     &[
         |t| Box::new(CSABTree::new(t)) as Box<dyn BenchableLive>,
-        |t| Box::new(TDSimpleBTree::new(t)) as Box<dyn BenchableLive>
+        // |t| Box::new(TDSimpleBTree::new(t)) as Box<dyn BenchableLive>
     ]
 }
