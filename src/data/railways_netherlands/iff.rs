@@ -351,12 +351,12 @@ pub fn get_timetable_for_day(date: &NaiveDate) -> Result<Timetable, Box<dyn Erro
         service_ids.iter().map(|(id, range)| {
             Trip {
                 identifier: *id,
-                connections: query_to_trip(&connections[range.clone()], &stops, datetime)
+                connections: query_to_trip(&connections[range.clone()], &stops, datetime, *id)
             }
         }).collect()
     }
 
-    fn query_to_trip(query_connections: &[QueryConnection], stops: &HashMap<&String, usize>, datetime: &DateTime<Local>) -> Vec<Connection> {
+    fn query_to_trip(query_connections: &[QueryConnection], stops: &HashMap<&String, usize>, datetime: &DateTime<Local>, id: usize) -> Vec<Connection> {
         let mut connections = vec![];
         let mut prev_connection = &query_connections[0];
         for next_connection in &query_connections[1..] {
@@ -375,7 +375,7 @@ pub fn get_timetable_for_day(date: &NaiveDate) -> Result<Timetable, Box<dyn Erro
                 dep_time: (*datetime + Duration::hours(dep_time / 100) + Duration::minutes(dep_time % 100)).timestamp() as u32,
                 arr_time: (*datetime + Duration::hours(arr_time / 100) + Duration::minutes(arr_time % 100)).timestamp() as u32,
 
-                trip_id: prev_connection.service_id as usize
+                trip_id: id
             });
             prev_connection = next_connection;
         }
