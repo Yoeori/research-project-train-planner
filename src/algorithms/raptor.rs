@@ -80,7 +80,7 @@ impl<'a> Benchable<'a> for Raptor<'a> {
         earliest_arrival[dep_stop] = dep_time;
 
         // For constructing the journey
-        let mut interchange: Vec<Option<(usize, usize, u32)>> = vec![None; MAX_STATIONS];
+        let mut interchange: Vec<Option<(usize, usize, u32)>> = vec![None; MAX_STATIONS * 10];
         let mut prev: Vec<Option<(&Connection, &Connection, (usize, usize, u32))>> = vec![None; MAX_STATIONS];
 
         let mut marked = HashSet::new();

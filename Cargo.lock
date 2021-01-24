@@ -1108,6 +1108,7 @@ dependencies = [
  "regex",
  "reqwest",
  "serde",
+ "serde_json",
  "serde_repr",
  "smol_str",
  "tokio",

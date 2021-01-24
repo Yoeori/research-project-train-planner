@@ -31,7 +31,7 @@ impl<'a> Benchable<'a> for CSABTree<'a> {
     fn find_earliest_arrival(&self, dep_stop: usize, arr_stop: usize, dep_time: u32) -> Option<TripResult> {
         let mut earliest_arrival = vec!(std::u32::MAX; MAX_STATIONS);
         let mut in_connection = vec!(None; MAX_STATIONS);
-        let mut journeys = vec!(None; MAX_STATIONS);
+        let mut journeys = HashMap::new();
 
         for &(f_stop, dur) in self.footpaths.get(&dep_stop).unwrap() {
             earliest_arrival[f_stop] = dep_time + dur;
@@ -56,7 +56,7 @@ impl<'a> Benchable<'a> for CSABTree<'a> {
                 for &(f_stop, dur) in self.footpaths.get(&conn.arr_stop).unwrap() {
                     if conn.arr_time + dur < earliest_arrival[f_stop] {
                         earliest_arrival[f_stop] = conn.arr_time + dur;
-                        journeys[f_stop] = Some((in_connection[conn.trip_id].unwrap(), conn, (conn.arr_stop, f_stop, dur)))
+                        journeys.insert(f_stop, (in_connection[conn.trip_id].unwrap(), conn, (conn.arr_stop, f_stop, dur)));
                     }
                 }
             }
@@ -64,7 +64,7 @@ impl<'a> Benchable<'a> for CSABTree<'a> {
 
         let mut journey = vec![];
         let mut cur = arr_stop;
-        while let Some((con1, con2, footpath)) = journeys[cur] {
+        while let Some((con1, con2, footpath)) = journeys.get(&cur) {
             journey.push(TripPart::Footpath(footpath.0, footpath.1, footpath.2));
             journey.push(TripPart::Connection(con1, con2));
             cur = con1.dep_stop;
