@@ -73,7 +73,7 @@ impl<'a> Benchable<'a> for RaptorBTree<'a> {
             let mut q: HashMap<usize, usize> = HashMap::new();
 
             for p in &marked {
-                for r in self.stops_routes.get(p).unwrap() {
+                for r in self.stops_routes.get(p).unwrap_or(&HashSet::new()) {
                     // Tracking: https://github.com/rust-lang/rfcs/blob/master/text/2497-if-let-chains.md :(
                     if let Some(p2) = q.get(r) {
                         if !self.routes[*r].before(p, p2) {
@@ -133,9 +133,12 @@ impl<'a> Benchable<'a> for RaptorBTree<'a> {
         }
 
         parts.reverse();
-        parts.remove(0);
 
-        dbg!(&parts);
+        if parts.is_empty(){
+            return None;
+        }
+        
+        parts.remove(0);
 
         return Some(TripResult {
             parts
@@ -143,7 +146,7 @@ impl<'a> Benchable<'a> for RaptorBTree<'a> {
     }
 
     fn name(&self) -> &'static str {
-        "RAPTOR"
+        "RAPTOR BTree"
     }
 
     fn new(timetable: &'a Timetable) -> Self where Self: Sized {

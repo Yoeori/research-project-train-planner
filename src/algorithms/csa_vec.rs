@@ -67,6 +67,10 @@ impl<'a> Benchable<'a> for CSAVec<'a> {
             cur = con1.dep_stop;
         }
 
+        if journey.is_empty() {
+            return None;
+        }
+
         journey.reverse();
 
         // We do not care about the final footpath

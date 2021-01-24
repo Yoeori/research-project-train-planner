@@ -72,6 +72,10 @@ impl<'a> Benchable<'a> for CSABTree<'a> {
 
         journey.reverse();
 
+        if journey.is_empty() {
+            return None;
+        }
+
         // We do not care about the final footpath
         journey.remove(journey.len()-1);
 

@@ -76,18 +76,19 @@ async fn main() -> Result<(), Box<dyn Error + 'static>> {
                     println!("Generating timetable and updates list, this might take a while...");
                     let date = NaiveDate::from_ymd(2021, 1, 15);
                     let timetable = iff::get_timetable_for_day(&date)?;
-                    let updates = info_plus::read_dvs_to_updates(&date)?;
 
-                    println!("The timetable contains {} connections, stopping at {} places and contains {} updates.", 
+                    println!("The timetable contains {} connections, stopping at {} places.", 
                         &timetable.trips.iter().map(|t| t.connections.len()).sum::<usize>(),
                         &timetable.stops.len(),
-                        updates.len()
                     );
 
                     println!("Starting bench of static algorithms..");
                     benchmarking::bench_algorithms("IFF", &timetable)?;
 
-                    println!("Starting bench of live algorithms..");
+                    println!("Done with static benchmark, fetching live updates...");
+                    let updates = info_plus::read_dvs_to_updates(&date)?;
+
+                    println!("Starting bench of live algorithms with {} updates...", updates.len());
                     benchmarking::bench_algorithms_live("IFF", &timetable, &updates)?;
                 }
                 Some("trainline") => {

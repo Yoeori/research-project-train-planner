@@ -114,8 +114,6 @@ impl<'a> Benchable<'a> for TDSimpleBTree<'a> {
                 let mut last_part: Option<TripPart> = None;
 
                 while let Some(trip) = &prev[cur] {
-                    dbg!(trip);
-
                     match trip {
                         TripPart::Connection(c, d) => {
                             if let Some(TripPart::Connection(a, b)) = last_part {
@@ -149,8 +147,6 @@ impl<'a> Benchable<'a> for TDSimpleBTree<'a> {
                 }
 
                 parts.reverse();
-
-                // dbg!(&parts);
 
                 return Some(TripResult {
                     parts
