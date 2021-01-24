@@ -430,7 +430,7 @@ pub fn get_timetable_for_day(date: &NaiveDate) -> Result<Timetable, Box<dyn Erro
     // Now we create a 'loopback' footpath for each station
     let mut footpaths = HashMap::new();
     for (_, &stop) in &stops {
-        footpaths.insert(stop, vec![(stop, 12*60)]);
+        footpaths.insert(stop, vec![(stop, 0)]);
     }
 
     Ok(Timetable {
