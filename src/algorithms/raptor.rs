@@ -56,7 +56,7 @@ impl<'a> Route<'a> {
     }
 
     fn len(&self) -> usize {
-        self.trips[0].connections.len()
+        self.stops.len()-1
     }
 }
 
@@ -80,7 +80,7 @@ impl<'a> Benchable<'a> for Raptor<'a> {
         earliest_arrival[dep_stop] = dep_time;
 
         // For constructing the journey
-        let mut interchange: Vec<Option<(usize, usize, u32)>> = vec![None; MAX_STATIONS * 10];
+        let mut interchange: Vec<Option<(usize, usize, u32)>> = vec![None; MAX_STATIONS];
         let mut prev: Vec<Option<(&Connection, &Connection, (usize, usize, u32))>> = vec![None; MAX_STATIONS];
 
         let mut marked = HashSet::new();

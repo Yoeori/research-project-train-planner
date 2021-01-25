@@ -36,7 +36,7 @@ impl<'a> Route<'a> {
     }
 
     fn len(&self) -> usize {
-        self.trips.iter().next().unwrap().connections.len()
+        self.stops.len()-1
     }
 }
 
@@ -63,7 +63,7 @@ impl<'a> Benchable<'a> for RaptorBTree<'a> {
         earliest_arrival[dep_stop] = dep_time;
 
         // For constructing the journey
-        let mut interchange: Vec<Option<(usize, usize, u32)>> = vec![None; MAX_STATIONS * 10];
+        let mut interchange: Vec<Option<(usize, usize, u32)>> = vec![None; MAX_STATIONS];
         let mut prev: Vec<Option<(&Connection, &Connection, (usize, usize, u32))>> = vec![None; MAX_STATIONS];
 
         let mut marked = HashSet::new();
@@ -94,7 +94,11 @@ impl<'a> Benchable<'a> for RaptorBTree<'a> {
                     if !t.is_none() && t.unwrap().connections[i-1].arr_time < cmp::min(earliest_arrival[arr_stop], earliest_arrival[pi]) {
                         earliest_k_arrival[pi][k] = t.unwrap().connections[i-1].arr_time;
                         earliest_arrival[pi] = t.unwrap().connections[i-1].arr_time;
-                        prev[pi] = Some((&t.unwrap().connections[t_from], &t.unwrap().connections[i-1], interchange[t.unwrap().connections[t_from].dep_stop].unwrap()));
+                        prev[pi] = Some((
+                            &t.unwrap().connections[t_from],
+                            &t.unwrap().connections[i-1],
+                            interchange[t.unwrap().connections[t_from].dep_stop].unwrap()
+                        ));
                         marked.insert(pi);
                     }
 
@@ -200,7 +204,7 @@ impl<'a> Benchable<'a> for RaptorBTree<'a> {
 
             stops_route.insert(
                 vec_route,
-                routes.len()
+                routes.len()-1
             );
         }
 
