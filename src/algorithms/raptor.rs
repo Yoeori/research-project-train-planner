@@ -163,7 +163,7 @@ impl<'a> Benchable<'a> for Raptor<'a> {
     }
 
     fn name(&self) -> &'static str {
-        "RAPTOR Vec"
+        "RAPTOR with Vec"
     }
 
     fn new(timetable: &'a Timetable) -> Self where Self: Sized {

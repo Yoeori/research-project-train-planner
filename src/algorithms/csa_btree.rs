@@ -13,7 +13,7 @@ pub struct CSABTree<'a> {
 // Based on https://github.com/trainline-eu/csa-challenge/blob/master/csa.rs (WTFPL license)
 impl<'a> Benchable<'a> for CSABTree<'a> {
     fn name(&self) -> &'static str {
-        "Connection Scan Algorithm with BTree"
+        "CSA with BTree"
     }
 
     fn new(timetable: &'a Timetable) -> Self {

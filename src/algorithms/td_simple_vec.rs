@@ -91,7 +91,7 @@ pub struct TDSimpleVec<'a> {
 
 impl<'a> Benchable<'a> for TDSimpleVec<'a> {
     fn name(&self) -> &'static str {
-        "Simple time-dependent graph approach with Vector"
+        "TD with Vec"
     }
 
     fn new(timetable: &'a Timetable) -> Self {

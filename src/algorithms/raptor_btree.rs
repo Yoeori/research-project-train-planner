@@ -146,7 +146,7 @@ impl<'a> Benchable<'a> for RaptorBTree<'a> {
     }
 
     fn name(&self) -> &'static str {
-        "RAPTOR BTree"
+        "RAPTOR with BTree"
     }
 
     fn new(timetable: &'a Timetable) -> Self where Self: Sized {

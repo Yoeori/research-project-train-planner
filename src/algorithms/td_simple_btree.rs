@@ -42,7 +42,7 @@ pub struct TDSimpleBTree<'a> {
 
 impl<'a> Benchable<'a> for TDSimpleBTree<'a> {
     fn name(&self) -> &'static str {
-        "Simple time-dependent graph approach with Binary Tree"
+        "TD with BTree"
     }
 
     fn new(timetable: &'a Timetable) -> Self {

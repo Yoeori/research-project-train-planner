@@ -13,7 +13,7 @@ pub struct CSAVec<'a> {
 // Based on https://github.com/trainline-eu/csa-challenge/blob/master/csa.rs (WTFPL license)
 impl<'a> Benchable<'a> for CSAVec<'a> {
     fn name(&self) -> &'static str {
-        "Connection Scan Algorithm with Vec"
+        "CSA with Vec"
     }
 
     fn new(timetable: &'a Timetable) -> Self {
