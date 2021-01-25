@@ -64,7 +64,7 @@ pub fn dvs_stream(envelopes: &'static [&[u8]]) -> Vec<JoinHandle<Result<(), Box<
     
 }
 
-pub fn read_dvs_to_updates(date: &NaiveDate) -> Result<Vec<TripUpdate>, Box<dyn Error>> {
+pub fn read_dvs_to_updates(date: &NaiveDate) -> Result<Vec<Vec<TripUpdate>>, Box<dyn Error>> {
 
     // Get timetable for given data
     let timetable = iff::get_timetable_for_day(&date)?;
@@ -117,6 +117,8 @@ pub fn read_dvs_to_updates(date: &NaiveDate) -> Result<Vec<TripUpdate>, Box<dyn 
                             t.is_some()
                         }).map(|t| t.unwrap()) {
 
+                        let mut update = vec![];
+
                         // TODO: One current bug is the fact that date+train id for RIT messages does not always correspond
                         // to the same date+train id in IFF. This is the case for some trains that are planned in a timeschedule day
                         // after midnight.
@@ -140,8 +142,9 @@ pub fn read_dvs_to_updates(date: &NaiveDate) -> Result<Vec<TripUpdate>, Box<dyn 
 
                             // Should we remove the whole trip?
                             if rit_trip.connections.is_empty() {
-                                trip.clear();
-                                updates.push(TripUpdate::DeleteTrip { trip: old_trip.clone() });
+                                trips.remove(&rit_trip.identifier);
+                                update.push(TripUpdate::DeleteTrip { trip: old_trip.clone() });
+                                updates.push(update);
                                 continue;
                             }
 
@@ -151,19 +154,21 @@ pub fn read_dvs_to_updates(date: &NaiveDate) -> Result<Vec<TripUpdate>, Box<dyn 
 
                             for new_connection in new_connections {
                                 trip.insert(new_connection.clone());
-                                updates.push(TripUpdate::AddConnection { old_trip: old_trip.clone(), new_trip: rit_trip.clone(), connection: new_connection });
+                                update.push(TripUpdate::AddConnection { old_trip: old_trip.clone(), new_trip: rit_trip.clone(), connection: new_connection });
                             }
 
                             for del_connection in del_connections {
                                 trip.remove(&del_connection);
-                                updates.push(TripUpdate::DeleteConnection { old_trip: old_trip.clone(), new_trip: rit_trip.clone(), connection: del_connection });
+                                update.push(TripUpdate::DeleteConnection { old_trip: old_trip.clone(), new_trip: rit_trip.clone(), connection: del_connection });
                             }
 
                         } else {
                             // This is a new trip, we add the trip.
                             trips.insert(rit_trip.identifier, rit_trip.connections.clone().into_iter().collect());
-                            updates.push(TripUpdate::AddTrip { trip: rit_trip });
+                            update.push(TripUpdate::AddTrip { trip: rit_trip });
                         }
+
+                        updates.push(update);
                     }
                 },
                 _ => {}

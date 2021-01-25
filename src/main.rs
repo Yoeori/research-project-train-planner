@@ -11,12 +11,14 @@ mod algorithms;
 mod data;
 pub mod database;
 
-use std::error::Error;
+use std::{error::Error, fs::File};
 use benchable::{Benchable, BenchableLive};
 use chrono::{Local, NaiveDate, TimeZone};
 use clap::{App, Arg, SubCommand};
+use serde_json::{self, from_reader};
 
 use data::railways_netherlands::{info_plus, iff};
+use types::TripUpdate;
 
 // Embeds migrations from migrations folder
 embed_migrations!();
@@ -47,6 +49,8 @@ async fn main() -> Result<(), Box<dyn Error + 'static>> {
             .default_value("iff")))
         .subcommand(SubCommand::with_name("example"))
             .about("Gets route from Enschede Kennispark to Amersfoort Centraal on 2021-01-15 at 12:00")
+        .subcommand(SubCommand::with_name("updates"))
+            .about("Preload updates and save in file")
         .subcommand(SubCommand::with_name("trip")
             .about("Looks up a specific trip on 2021-01-15")
             .arg(Arg::with_name("id").help("Train number").required(true)
@@ -86,9 +90,11 @@ async fn main() -> Result<(), Box<dyn Error + 'static>> {
                     benchmarking::bench_algorithms("IFF", &timetable)?;
 
                     println!("Done with static benchmark, fetching live updates...");
-                    let updates = info_plus::read_dvs_to_updates(&date)?;
+                    // let updates = info_plus::read_dvs_to_updates(&date)?;
+                    let file = File::open("updates.json")?;
+                    let updates: Vec<Vec<TripUpdate>> = from_reader(file)?;
 
-                    println!("Starting bench of live algorithms with {} updates...", updates.len());
+                    println!("Starting bench of live algorithms with {} updates...", updates.iter().map(|x| x.len()).sum::<usize>());
                     benchmarking::bench_algorithms_live("IFF", &timetable, &updates)?;
                 }
                 Some("trainline") => {
@@ -108,7 +114,7 @@ async fn main() -> Result<(), Box<dyn Error + 'static>> {
 
         }
         ("trip", Some(sub_matches)) => {
-            let id = sub_matches.value_of("id").unwrap().parse().unwrap();
+            let id: usize = sub_matches.value_of("id").unwrap().parse().unwrap();
             println!("Looking up route of service {}", id);
 
             let timetable = iff::get_timetable_for_day(&NaiveDate::from_ymd(2021, 1, 15))?;
@@ -134,14 +140,24 @@ async fn main() -> Result<(), Box<dyn Error + 'static>> {
             println!("{}", route.format_fancy(&timetable.stops));
 
             // Get changes
-            let updates = info_plus::read_dvs_to_updates(&date)?;
-            for update in updates.iter() {
+            let file = File::open("updates.json")?;
+            let updates: Vec<Vec<TripUpdate>> = from_reader(file)?;
+            for update in updates.iter().flatten() {
                 alg.update(update);
             }
 
             println!("After updating:");
             let route = alg.find_earliest_arrival(*esk, *amf, Local.ymd(2021, 1, 15).and_hms(13, 0, 0).timestamp() as u32).unwrap();
             println!("{}", route.format_fancy(&timetable.stops));
+
+        }
+        ("updates", _) => {
+            // Preload updates and save in file.
+            let date = NaiveDate::from_ymd(2021, 1, 15);
+            let updates = info_plus::read_dvs_to_updates(&date)?;
+
+            let file = File::create("updates.json")?;
+            serde_json::to_writer(file, &updates)?;
 
         }
         _ => {},

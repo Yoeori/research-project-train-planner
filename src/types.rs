@@ -11,10 +11,11 @@
 use std::{cmp::Ordering, collections::HashMap, error::Error, fmt::{self, Debug}};
 use std::hash::Hash;
 
+use serde::{Deserialize, Serialize};
 use chrono::{Local, TimeZone};
 
 /// As defined
-#[derive(Debug, PartialEq, Eq, Hash, Clone)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Serialize, Deserialize)]
 pub struct Connection {
     pub dep_stop: usize,
     pub arr_stop: usize,
@@ -55,7 +56,7 @@ impl Connection {
 }
 
 // As defined (added identifier for 'easier' identification)
-#[derive(Debug, PartialEq, Eq, Hash, Clone)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Serialize, Deserialize)]
 pub struct Trip {
     pub identifier: usize,
     pub connections: Vec<Connection>
@@ -75,7 +76,7 @@ impl PartialOrd for Trip {
 }
 
 // As defined, however trip based for identification purposes
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[allow(dead_code)]
 pub enum TripUpdate {
     DeleteTrip { trip: Trip },

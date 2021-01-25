@@ -62,7 +62,7 @@ fn bench_algorithm<'a>(data_set: &str, benchable: &Box<dyn Benchable<'a> + 'a>, 
     times
 }
 
-pub fn bench_algorithms_live<'a>(data_set: &str, timetable: &'a Timetable, updates: &'a Vec<TripUpdate>) -> Result<(), Box<dyn Error>> {
+pub fn bench_algorithms_live<'a>(data_set: &str, timetable: &'a Timetable, updates: &'a Vec<Vec<TripUpdate>>) -> Result<(), Box<dyn Error>> {
     let mut res_routes: Vec<RouteBench> = Vec::with_capacity(timetable.stops.len().pow(2));
     let mut res_updates: Vec<UpdateBench> = Vec::with_capacity(timetable.stops.len().pow(2));
 
@@ -90,7 +90,7 @@ pub fn bench_algorithms_live<'a>(data_set: &str, timetable: &'a Timetable, updat
     Ok(())
 }
 
-fn bench_algorithm_live<'a>(data_set: &str, benchable: &mut Box<dyn BenchableLive<'a> + 'a>, timetable: &'a Timetable, updates: &'a Vec<TripUpdate>) -> (Vec<RouteBench>, Vec<UpdateBench>) {
+fn bench_algorithm_live<'a>(data_set: &str, benchable: &mut Box<dyn BenchableLive<'a> + 'a>, timetable: &'a Timetable, updates: &'a Vec<Vec<TripUpdate>>) -> (Vec<RouteBench>, Vec<UpdateBench>) {
     let mut route_times = vec![];
     let mut update_times = vec![];
     
@@ -113,15 +113,17 @@ fn bench_algorithm_live<'a>(data_set: &str, benchable: &mut Box<dyn BenchableLiv
             });
 
             for _ in 0..updates_to_perform_per_iteration {
-                if let Some(update) = updates.next() {
-                    let before = Instant::now();
-                    benchable.update(&update);
-                    let time = before.elapsed();
-                    update_times.push(UpdateBench {
-                        data_set: data_set.to_string(),
-                        algorithm: benchable.name().to_string(),
-                        time_in_ns: time.as_nanos(),
-                    });
+                if let Some(updates) = updates.next() {
+                    for update in updates {
+                        let before = Instant::now();
+                        benchable.update(&update);
+                        let time = before.elapsed();
+                        update_times.push(UpdateBench {
+                            data_set: data_set.to_string(),
+                            algorithm: benchable.name().to_string(),
+                            time_in_ns: time.as_nanos(),
+                        });
+                    }
                 }
             }
         }
