@@ -4,3 +4,4 @@
 .vscode
 bench*.csv
 _*
+updates*.json
